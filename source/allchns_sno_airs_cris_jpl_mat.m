@@ -241,6 +241,7 @@ end
 
 % Plotting section
 % ----------------
+addpath /asl/matlib/plotutils              % aslprint.m
 jj = 90;
 bincen = qsBins(jj,1:end-1);
 figure(1);clf;
@@ -251,8 +252,16 @@ figure(2);clf;subplot(2,1,1)
   plot(bincen(blo(jj,1):bhi(jj,1)),btbias(jj,blo(jj,1):bhi(jj,1)));grid on;
  subplot(2,1,2);plot(bincen(blo(jj,2):bhi(jj,2)),btbias(jj,blo(jj,2):bhi(jj,2)));grid on;
 
-figure(3);clf;subplot(2,1,1);plot(wmstats.wn,wmstats.cbm,'b-',wmstats.wn,wmstats.dbm,'g-');grid on;
-  subplot(2,1,2);plot(wmstats.wn,wmstats.cbm - wmstats.dbm,'m.-');grid on;
+figure(3);clf;h1=subplot(2,1,1);plot(wmstats.wn,wmstats.cbm,'b-',wmstats.wn,wmstats.dbm,'g-');
+  grid on;title('Airs (g) CrIS (b) 2013 6mos SNO mean BT');ylabel('BT K');
+  h2=subplot(2,1,2);plot(wmstats.wn,wmstats.cbm - wmstats.dbm,'m.-');
+  grid on;xlabel('wavenumber');ylabel('BT Bias K');
+  ha=findobj(gcf,'type','axes');set(ha(1),'ylim',[-6 4]);
+  linkaxes([h1 h2],'x');set(h1,'xticklabel','');pp=get(h1,'position');
+  set(h1,'position',[pp(1) pp(2)-pp(4)*0.1 pp(3) pp(4)*1.1])
+  pp=get(h2,'position'); set(h2,'position',[pp(1) pp(2) pp(3) pp(4)*1.1]);
+  aslprint(['./figs/AC_SNO_2013a_chns' sprintf('%d',igrp) '.png']);
+
 %{
 there is one structure: wmstats
 There are 200 channels. 
