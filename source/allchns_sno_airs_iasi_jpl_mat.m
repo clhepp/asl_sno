@@ -22,7 +22,7 @@ function wmstats = allchns_sno_airs_iasi_jpl_mat(sdate, igrp)
 
 cd /home/chepplew/gitLib/asl_sno/run
 addpath /home/chepplew/gitLib/asl_sno/source
-addpath /home/chepplew/gitLib/asl_sno/data       % cris_freq_*.mat
+addpath /home/chepplew/gitLib/asl_sno/data        % cris_freq_*.mat
 addpath /home/chepplew/myLib/matlib/aslutil       % rad2bt.m
 addpath /home/strow/Git/breno_matlab/Math         % Math_bin.m
 addpath /asl/matlab2012/aslutil/                  % drdbt.m
@@ -36,7 +36,8 @@ nyr = str2num(syr); nmn = str2num(smn);  ndy = str2num(sdy);
 % set up the channels to process (applies to the common grid):
 if (igrp < 1 || igrp > 6) fprintf(1,'igrp out of range (1 to 6)\n'); exit; end
 ichns = [(igrp-1)*400 + 1:igrp*400];                        % applies to the IASI->AIRS
-%%if(igrp == 6) ichns = [1001:1185]; end
+if(igrp == 6) ichns = [2001:2378]; end
+fprintf(1,'Doing channels %d to %d\n',ichns(1),ichns(end));
 
 % load the frequency grids:
 xx=load('/asl/data/airs/airs_freq.mat'); fa=xx.freq; clear xx;
@@ -84,7 +85,8 @@ fprintf(1,'Processing SNO files from %s to %s\n',ccs{ifn1}, ccs{ifn2});
 
 clear g;
 s.td    = [];   s.arad = [;]; s.irad = [;]; s.drad = [;]; s.itim = [];  s.atim = []; 
-s.arlat = [];  s.arlon = [];  s.dsn  = []; s.ialat = []; s.ialon = []; s.csolz = [];  
+s.arlat = [];  s.arlon = [];  s.dsn  = []; s.ialat = []; s.ialon = []; s.csolz = [];
+s.iqual = [];  
 %s.alnfr = [];  s.clnfr = []; s.cifv  = [];
 %a.nSam  = [];   a.avrd = [;]; a.avra = [;]; a.avrc = [;]; a.sdra = [;]; a.sdrc = [;]; 
 %a.sdrd  = [;];
@@ -98,6 +100,7 @@ for ifnum = ifn1:ifn2
       %%s.arad  = [s.arad, g.ra(achns,:)];                % [arad, [ra(achn,:); avaw]]; etc
       s.arad  = [s.arad, g.ra(ichns,:)];              % 
       s.drad  = [s.drad, g.i2ra(ichns,:)];         %
+      s.iqual = [s.iqual, g.iqual'];
       end
     %end
   end
@@ -109,9 +112,9 @@ fprintf(1,'\n');
 fprintf(1,'number of SNO pairs: %d\n', ny);
 
 % quality control
-inz = find(real(s.drad) < 10);
-s.drad(inz) = NaN;
-fprintf(1,'Found %d bad i2ra radiances\n',numel(inz));
+inq = find(s.iqual ~= 0);
+s.drad(inq) = NaN;  s.arad(inq) = NaN;                 % need to match pairs.
+fprintf(1,'Found %d bad i2ra radiances\n',numel(inq));
  
 % convert Obs to BT
 %%abt  = real(rad2bt(fa(achns),s.arad));
@@ -268,8 +271,8 @@ figure(2);clf;subplot(2,1,1)
 figure(3);clf;h1=subplot(2,1,1);plot(wmstats.wn,wmstats.abm,'b-',wmstats.wn,wmstats.dbm,'g-');
   grid on;title('Airs (g) IASI (b) 2011-14 SNO mean BT');ylabel('BT K');
   h2=subplot(2,1,2);plot(wmstats.wn,wmstats.abm - wmstats.dbm,'m.-');
-  grid on;xlabel('wavenumber');ylabel('BT Bias K');
-  ha=findobj(gcf,'type','axes');set(ha(1),'ylim',[-Inf Inf]);
+  grid on;xlabel('wavenumber');ylabel('BT Bias K');ylim([-1 1]);
+  %%ha=findobj(gcf,'type','axes');set(ha(1),'ylim',[-Inf Inf]);
   linkaxes([h1 h2],'x');set(h1,'xticklabel','');pp=get(h1,'position');
   set(h1,'position',[pp(1) pp(2)-pp(4)*0.1 pp(3) pp(4)*1.1])
   pp=get(h2,'position'); set(h2,'position',[pp(1) pp(2) pp(3) pp(4)*1.1]);
