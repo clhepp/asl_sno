@@ -25,14 +25,19 @@ function s = read_sno_airs_iasi_jpl_mat(sdate1, sdate2, xchns)
 % Notes: i) No QA is applied. ii) time separation of SNO pairs from file is positive-only
 %    so is recomputed here. iii) the SNO files are monthly sets.
 %
+% VERSION: Nov 2015: changed dir() to unix(find...)
+%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-addpath /asl/matlab2012/aslutil/                % drdbt.m
+cd /home/chepplew/gitLib/asl_sno/run
 
-cd /home/chepplew/projects/sno/airs_iasi/
+addpath /home/chepplew/gitLib/asl_sno/source
+addpath /asl/matlab2012/aslutil/                  % drdbt.m
+addpath /asl/packages/ccast/source                % seq_match.m
+addpath /asl/matlib/plotutils                     % aslprint.m
 
 % Specify if SNO from JPL or ASL
-SRC = 'ASL';
+SRC = 'JPL';
 
 % check dates are entered correctly:
 if (length(sdate1) ~= 10 || length(sdate2) ~= 10) fprintf(1,'Error in dates\n'); exit; end
@@ -69,6 +74,7 @@ junk = ismember([1:2378], nig);  nib = find(junk == 0);  clear junk;
 
 load('/asl/data/iremis/danz/iasi_f.mat');                  % fiasi [8461x1]
 load('/asl/data/airs/airs_freq.mat'); fa=freq; clear freq; % fa    [2378x1]
+[xa xi] = seq_match(fa, fiasi);
 
 % Screen the channel selection for AIRS bad channels and update if necessary:
 aWavs = fa(xchns);
@@ -86,19 +92,32 @@ for i=1:numel(aWavs) s.sWavs{i}  = sprintf('%6.2f',aWavs(i)); end
 
 % ************* load up SNO data ********************
 dp     = ['/asl/s1/chepplew/projects/sno/airs_iasi/' SRC '/'];      % standard/';
-snoLst = dir(strcat(dp,'sno_airs_iasi_*.mat'));
-fprintf(1,'Found %d SNO files\n',numel(snoLst));
+unix(['cd ' dp '; find . -noleaf -type f -name ''sno_airs_iasi_*.mat'' -printf ''%P\n'' > /tmp/fn.txt;']);
+fh = fopen('/tmp/fn.txt');
+x  = fgetl(fh);
+i  = 1;
+while ischar(x)
+   cc{i} = x;
+   i = i + 1;
+   x = fgetl(fh);
+end
+fclose(fh);
+cc  = cellstr(cc);
+ccs = sort(cc);
+%fullfile(dp,ccs{i})  Note that i = 1:length(ccs)
+  %snoLst = dir(strcat(dp,'sno_airs_cris_*.mat'));
+fprintf(1,'Found %d total SNO files\n',numel(ccs));
 
 % subset range by date as requested:
 dstart = datenum([nyr1 nmn1 ndy1]);
 dlast  = datenum([nyr2 nmn2 ndy2]);
-for i=1:numel(snoLst)
-  junk = snoLst(i).name(15:22);
+for i=1:numel(ccs)
+  junk = ccs{i}(15:22);
   thisdat = datenum( [str2num(junk(1:4)) str2num(junk(5:6)) str2num(junk(7:8))] );
   if(thisdat <= dstart) ifn1 = i; end
   if(thisdat <= dlast) ifn2 = i; end
 end
-fprintf(1,'Prcessing SNO files from: %s to %s\n',snoLst(ifn1).name, snoLst(ifn2).name);
+fprintf(1,'Prcessing SNO files from: %s to %s\n',ccs{ifn1}, ccs{ifn2});
 
 % Load requested SNO data
 s.td    = [];  s.arad = [;]; s.irad = [;]; s.drad = [;]; s.itim = [];  s.atim = []; 
@@ -106,44 +125,71 @@ s.arlat = []; s.arlon = [];  s.dsn  = []; s.irlat = []; s.irlon = []; s.isolz = 
 s.nSam  = []; s.alnfr = []; s.ilnfr = [];  s.avrd = [;]; s.avra = [;]; s.avri = [;]; 
 s.sdra  = [;]; s.sdri = [;]; s.sdrd = [;];s.iifv  = [];  s.Wavs = []; s.iqual = [];
 s.asolz = [];
+d  = struct;  d.nSam = [];  d.avra = [];  d.avrd = [];
+n  = struct;  n.nSam = [];  n.avra = [];  n.avrd = [];
+np = struct; np.nSam = []; np.avra = []; np.avrd = [];
+sp = struct; sp.nSam = []; sp.avra = []; sp.avrd = [];
 
 for ifnum = ifn1:ifn2
-  vars = whos('-file',strcat(dp,snoLst(ifnum).name));
+  vars = whos('-file',strcat(dp,ccs{ifnum}));
   if( ismember('i2ra', {vars.name}) )                  % was raDecon
-    if(snoLst(ifnum).bytes > 1.0E4)
-      g = load(strcat(dp,snoLst(ifnum).name));
+    %%%if(snoLst(ifnum).bytes > 1.0E4)
+    if(vars(4).size(1) > 500)                           % check sample size using alat
+      %%fprintf(1,'i: %d, alat: %d, ilat: %d\n', ifnum,vars(4).size(1),vars(15).size(1));
+      if( vars(4).size(1) == vars(15).size(1) )         % ensure same no. obs
+      g = load(strcat(dp,ccs{ifnum}));
       %if(size(g.alat,1) < size(g.alat,2)) fprintf(1,'Unexpected row/column swapped\n'); end
       %if(size(g.atime,1) ~= size(g.itime,1)) fprintf(1,'Unequal samples\n'); continue; end
       s.arad  = [s.arad, g.ra(achn,:)];                % [arad, [ra(achn,:); avaw]]; etc
       s.irad  = [s.irad, g.ri(ichn,:)];                % 1317 chns (12 guard chans)
       s.drad  = [s.drad, g.i2ra(achn,:)];              %
-      s.atim  = [s.atim, g.atime];
+      s.atim  = [s.atim, g.atime'];
       s.itim  = [s.itim, g.itime'];
-      s.arlat = [s.arlat,g.alat];               s.arlon = [s.arlon, g.alon];
+      s.arlat = [s.arlat,g.alat'];              s.arlon = [s.arlon, g.alon'];
       s.irlat = [s.irlat,g.ilat'];              s.irlon = [s.irlon, g.ilon'];
-%      s.iifv  = [s.iifv, g.iifov'];
-      s.td    = [s.td,   g.tdiff];                     %
+      s.td    = [s.td,   g.tdiff'];                     %
       s.dsn   = [s.dsn,  g.dist'];
-      s.isolz = [s.isolz,g.isolzen'];           s.asolz = [s.asolz, g.asolzen];
-%      s.alnfr = [s.alnfr, g.alandfrac'];       s.ilnfr = [s.clnfr,g.ilandfrac']; 
+      s.isolz = [s.isolz,g.isolzen'];           s.asolz = [s.asolz, g.asolzen'];
       s.nSam  = [s.nSam,single(size(g.ra,2))];
+%      s.alnfr = [s.alnfr, g.alandfrac'];       s.ilnfr = [s.clnfr,g.ilandfrac']; 
 %      s.iqual = [s.iqual, g.iqual'];
+%      s.iifv  = [s.iifv, g.iifov'];
       s.avra  = [s.avra,nanmean(g.ra,2)];       s.sdra = [s.sdra,nanstd(g.ra,1,2)];  
       s.avri  = [s.avri,nanmean(g.ri,2)];       s.sdri = [s.sdri,nanstd(g.ri,1,2)];
       s.avrd  = [s.avrd,nanmean(g.i2ra,2)];     s.sdrd = [s.sdrd,nanstd(g.i2ra,1,2)];
+
+      idy     = find(g.asolzen < 90);
+      int     = find(g.asolzen >= 90);
+      d.nSam  = [d.nSam, numel(idy)];
+      n.nSam  = [n.nSam, numel(int)];
+      d.avra  = [d.avra, nanmean(g.ra(:,idy),2)];
+      n.avra  = [n.avra, nanmean(g.ra(:,int),2)];
+      d.avrd  = [d.avrd, nanmean(g.i2ra(:,idy),2)];
+      n.avrd  = [n.avrd, nanmean(g.i2ra(:,int),2)];
+
+      inp     = find(g.alat > 50);
+      ins     = find(g.alat < -50);
+      np.nSam = [np.nSam, numel(inp)];
+      sp.nSam = [sp.nSam, numel(ins)];
+      np.avra = [np.avra, nanmean(g.ra(:,inp),2)];
+      sp.avra = [sp.avra, nanmean(g.ra(:,ins),2)];
+      np.avrd = [np.avrd, nanmean(g.i2ra(:,inp),2)];
+      sp.avrd = [sp.avrd, nanmean(g.i2ra(:,ins),2)];
+            
       clear g;
+      end
     else
       fprintf('%d insufficient number samples\n',ifnum)
     end
   else
-    fprintf('skip %s ',snoLst(ifnum).name(15:22) );
+    fprintf('skip %s ',ccs{ifnum}(15:22) );
   end
   fprintf('.');
 end    
 fprintf('\n');
-s.td2 = s.atim - s.itim;              % tdiff from JPL are all real positive :WRONG
-
+s.td2  = s.atim - s.itim;              % tdiff from JPL are all real positive :WRONG
 s.Wavs = aWavs;                       % used by sno_quantile.m
+fprintf(1,'Total number of SNO pairs: %d\n',numel(s.td2));
 
 %{
 % plot options
@@ -211,4 +257,69 @@ dbte  = dbts/sqrt(sum(s.nSam));
   % save('SNO_AI_201X_BTspect.mat','AI');
 %}
 
+% --------------------------------
+%          Day night
+% --------------------------------
+n.ratpm = 0; n.rdtpm = 0; n.mbias = 0;
+for i = 1:numel(n.nSam)
+  n.ratpm = n.ratpm + n.avra(:,i).*n.nSam(i);
+  n.rdtpm = n.rdtpm + n.avrd(:,i).*n.nSam(i);
+end
+n.ratpm = n.ratpm/sum(n.nSam);
+n.rdtpm = n.rdtpm/sum(n.nSam);
+n.abtm  = real(rad2bt(fa,n.ratpm));
+n.dbtm  = real(rad2bt(fa,n.rdtpm));
+n.mbias = n.dbtm - n.abtm;
+
+d.ratpm = 0; d.rdtpm = 0; d.mbias = 0;
+for i = 1:numel(d.nSam)
+  d.ratpm = d.ratpm + d.avra(:,i).*d.nSam(i);
+  d.rdtpm = d.rdtpm + d.avrd(:,i).*d.nSam(i);
+end
+d.ratpm = d.ratpm/sum(d.nSam);
+d.rdtpm = d.rdtpm/sum(d.nSam);
+d.abtm  = real(rad2bt(fa,d.ratpm));
+d.dbtm  = real(rad2bt(fa,d.rdtpm));
+d.mbias = d.dbtm - d.abtm;
+
+fprintf(1,'Number day samples: %d, night: %d\n',sum(d.nSam),sum(n.nSam));
+
+% -----------------------------------
+%           north/south polar
+% -----------------------------------
+np.ratpm = 0; np.rdtpm = 0; np.mbias = 0;
+for i = 1:numel(np.nSam)
+  np.ratpm = np.ratpm + np.avra(:,i).*np.nSam(i);
+  np.rdtpm = np.rdtpm + np.avrd(:,i).*np.nSam(i);
+end
+np.ratpm = np.ratpm/sum(np.nSam);
+np.rdtpm = np.rdtpm/sum(np.nSam);
+np.abtm  = real(rad2bt(fa,np.ratpm));
+np.dbtm  = real(rad2bt(fa,np.rdtpm));
+np.mbias = np.dbtm - np.abtm;
+
+sp.ratpm = 0; sp.rdtpm = 0; sp.mbias = 0;
+for i = 1:numel(sp.nSam)
+  sp.ratpm = sp.ratpm + sp.avra(:,i).*sp.nSam(i);
+  sp.rdtpm = sp.rdtpm + sp.avrd(:,i).*sp.nSam(i);
+end
+sp.ratpm = sp.ratpm/sum(sp.nSam);
+sp.rdtpm = sp.rdtpm/sum(sp.nSam);
+sp.abtm  = real(rad2bt(fa,sp.ratpm));
+sp.dbtm  = real(rad2bt(fa,sp.rdtpm));
+sp.mbias = sp.dbtm - sp.abtm;
+
+
+%{
+bands = [640, 1650; 2170, 2680]
+figure(2);clf;h1=subplot(2,1,1);
+  plot(fa,n.abtm,'b-',fa,n.dbtm,'g-');grid on;axis([bands(1,:) 210 260]);
+  title('AIRS (b) IASI (g) SNO LW');ylabel('BT K');
+  h2=subplot(2,1,2);plot(fa,n.mbias,'m-',fa,d.mbias,'c-');
+    grid on;axis([bands(1,:) -1 1]);legend('night','day');ylabel('Bias K');xlabel('wn cm-1');
+  linkaxes([h1 h2],'x');set(h1,'xticklabel','');pp=get(h1,'position');
+  set(h1,'position',[pp(1) pp(2)-pp(4)*0.1 pp(3) pp(4)*1.1])
+  pp=get(h2,'position'); set(h2,'position',[pp(1) pp(2) pp(3) pp(4)*1.1]);
+  %aslprint('./figs/AI_SNO_JPL_DN_biasBT_LW.png');
+%}
 end
