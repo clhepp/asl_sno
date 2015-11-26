@@ -97,7 +97,6 @@ for ifnum = ifn1:ifn2
     %if(snoLst(ifnum).bytes > 1.0E4)
       if( vars(4).size(1) == vars(15).size(1) )         % ensure same no. obs
       g = load(strcat(dp,ccs{ifnum}));
-      %%s.arad  = [s.arad, g.ra(achns,:)];                % [arad, [ra(achn,:); avaw]]; etc
       s.arad  = [s.arad, g.ra(ichns,:)];              % 
       s.drad  = [s.drad, g.i2ra(ichns,:)];         %
       s.iqual = [s.iqual, g.iqual'];
