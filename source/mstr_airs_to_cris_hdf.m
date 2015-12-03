@@ -27,7 +27,7 @@ disp(fPatt)
 res = exist(srcD,'dir');
 if(res ~= 7) fprintf(1,'Error: source directory %s not found\n',srcD); exit; end
 clear res;
-res = dir(strcat(srcD,'/',fPatt,'.mat'));
+res = dir(strcat(srcD,'/',fPatt,'.hdf'));
 if(numel(res) < 1) fprintf(1,'Error: no files with this pattern found\n'); exit; end
 fLst = res; clear fnams;
 
@@ -35,18 +35,20 @@ njobs = numel(fLst); clear sJobs;
 for i=1:njobs sJobs{i} = [srcD fLst(i).name]; end
 
 % create the list of files to process and to be used by proc_airs_to_cris_mat.m
-FH = fopen('JobList.txt','w+');
+FH = fopen('proc_a2c_jobs.txt','w+');
 fprintf(FH,'%s\r\n',sJobs{:});
 fclose(FH);
 
 % create the slurm batch control shell script
 batch = './batch_Airs2Cris.slurm';
-FH = fopen(batch,'w+');
+FH = fopen(batch,'w');
 fprintf(FH,'#!/bin/bash\n\n');
 
 fprintf(FH,'#SBATCH --job-name=Ar2Cr\n');
+fprintf(FH,'#SBATCH --output=A2C_slurm-%%N.%%A.%%a.out\n');
+fprintf(FH,'#SBATCH --error=A2C_slurm-%%N.%%A.%%a.err\n');
 fprintf(FH,'#SBATCH --partition=batch\n');
-fprintf(FH,'#SBATCH --qos=medium\n');
+fprintf(FH,'#SBATCH --qos=normal\n');
 fprintf(FH,'#SBATCH --account=pi_strow\n');
 fprintf(FH,'#SBATCH -N1\n');
 fprintf(FH,'#SBATCH --mem=9000\n');
@@ -56,7 +58,7 @@ fprintf(FH,'#SBATCH --array=1-%d\n\n',njobs);
 fprintf(FH,'MATLAB=''/usr/cluster/matlab/2015a/bin/matlab''\n');
 fprintf(FH,'MATOPTS='' -nodisplay -nojvm -nosplash''\n\n');
 
-junk = sprintf('srun $MATLAB $MATOPTS -r "proc_airs_to_cris_mat; exit"');
+junk = sprintf('srun $MATLAB $MATOPTS -r "proc_airs_to_cris_hdf(''proc_a2c_jobs.txt''); exit"');
 fprintf(FH,'%s\n',junk);
 
 fclose(FH);

@@ -6,8 +6,8 @@ function s = read_sno_airs_iasi_jpl_mat(sdate1, sdate2, xchns)
 %  'load_sno_airs_iasi_jpl_mat' it does not calculate statistics during load.
 %
 % Synopsis: read_sno_airs_iasi_jpl_mat('date1','date2',[chan1...chan10]);
-%           date1: first month as string: 'YYYY/MM/DD'
-%           date2: last month as string: 'YYYY/MM/DD'
+%           sdate1: first month as string: 'YYYY/MM/DD', typically: '2011/01/02';
+%           sdate2: last month as string: 'YYYY/MM/DD',  typically: '2014/03/01';
 %           [chan1, ...]: numeric list of AIRS channels to load (max 10).
 %           eg [403 499 737  884  905  998  1021 1297]
 %           eg [759 902 1300 1608 1652 1789 1827 2203]
@@ -32,9 +32,11 @@ function s = read_sno_airs_iasi_jpl_mat(sdate1, sdate2, xchns)
 cd /home/chepplew/gitLib/asl_sno/run
 
 addpath /home/chepplew/gitLib/asl_sno/source
+addpath /home/chepplew/gitLib/asl_sno/data        % cris_freq*.mat
 addpath /asl/matlab2012/aslutil/                  % drdbt.m
 addpath /asl/packages/ccast/source                % seq_match.m
 addpath /asl/matlib/plotutils                     % aslprint.m
+addpath /asl/packages/airs_decon/source           % hamm_app
 
 % Specify if SNO from JPL or ASL
 SRC = 'JPL';
@@ -72,9 +74,13 @@ load('/home/chepplew/projects/airs/master_nig_01_2009.mat');   % nig [1 x 1535]
 % nig = importdata('/home/strow/Work/Airs/good_chan_list');
 junk = ismember([1:2378], nig);  nib = find(junk == 0);  clear junk;
 
+xx=load('cris_freq_2grd.mat');  fcris = xx.vchan; clear xx;    % 1317 chns (12 guard chans)
 load('/asl/data/iremis/danz/iasi_f.mat');                  % fiasi [8461x1]
 load('/asl/data/airs/airs_freq.mat'); fa=freq; clear freq; % fa    [2378x1]
-[xa xi] = seq_match(fa, fiasi);
+[xa xi]   = seq_match(sort(fa), fiasi);
+%%fa2c      = fcris([1:1037 1158:1305]);
+xx=load('/asl/s1/chepplew/projects/sno/airs_iasi/JPL/airs2cris_CAF_20101101.mat'); fa2c=xx.a2cfrq; clear xx;
+[xa2c xc] = seq_match(fa2c, fcris);
 
 % Screen the channel selection for AIRS bad channels and update if necessary:
 aWavs = fa(xchns);
@@ -86,13 +92,16 @@ end
 aWavs = fa(achn);
 for i=1:numel(aWavs)
   ichn(i) = find(fiasi  > aWavs(i)-0.125, 1);          % better matchup by going 0.125 low.
-%  dchn(i) = find(fd  > cWavs(i)-0.125, 1);
+  cchn(i) = find(fcris  > aWavs(i)-0.125, 1);
 end
 for i=1:numel(aWavs) s.sWavs{i}  = sprintf('%6.2f',aWavs(i)); end
 
-% ************* load up SNO data ********************
+
+% ---------------------------------------------------
+%               load up SNO data 
+% ---------------------------------------------------
 dp     = ['/asl/s1/chepplew/projects/sno/airs_iasi/' SRC '/'];      % standard/';
-unix(['cd ' dp '; find . -noleaf -type f -name ''sno_airs_iasi_*.mat'' -printf ''%P\n'' > /tmp/fn.txt;']);
+unix(['cd ' dp '; find . -maxdepth 1 -noleaf -type f -name ''sno_airs_iasi_*.mat'' -printf ''%P\n'' > /tmp/fn.txt;']);
 fh = fopen('/tmp/fn.txt');
 x  = fgetl(fh);
 i  = 1;
@@ -102,7 +111,7 @@ while ischar(x)
    x = fgetl(fh);
 end
 fclose(fh);
-cc  = cellstr(cc);
+cc  = unique(cellstr(cc));
 ccs = sort(cc);
 %fullfile(dp,ccs{i})  Note that i = 1:length(ccs)
   %snoLst = dir(strcat(dp,'sno_airs_cris_*.mat'));
@@ -120,10 +129,14 @@ end
 fprintf(1,'Prcessing SNO files from: %s to %s\n',ccs{ifn1}, ccs{ifn2});
 
 % Load requested SNO data
-s.td    = [];  s.arad = [;]; s.irad = [;]; s.drad = [;]; s.itim = [];  s.atim = []; 
-s.arlat = []; s.arlon = [];  s.dsn  = []; s.irlat = []; s.irlon = []; s.isolz = [];  
-s.nSam  = []; s.alnfr = []; s.ilnfr = [];  s.avrd = [;]; s.avra = [;]; s.avri = [;]; 
-s.sdra  = [;]; s.sdri = [;]; s.sdrd = [;];s.iifv  = [];  s.Wavs = []; s.iqual = [];
+s = struct;
+s.td    = [];  s.arad = [;]; s.irad = [;]; s.a2rc = [;]; s.i2ra = []; s.i2rc = [];
+s.itim  = [];  s.atim = []; 
+s.arlat = []; s.arlon = [];   s.dsn  = []; s.irlat = []; s.irlon = []; s.isolz = [];  
+s.nSam  = []; s.alnfr = [];  s.ilnfr = [];  
+s.avra  = [;]; s.avri = [;]; s.avri2c = [;]; s.avra2c = [];
+s.sdra  = [;]; s.sdri = [;]; s.sdri2c = [];  s.sdra2c = [];
+s.iifv  = [];  s.Wavs = []; s.iqual = [];
 s.asolz = [];
 d  = struct;  d.nSam = [];  d.avra = [];  d.avrd = [];
 n  = struct;  n.nSam = [];  n.avra = [];  n.avrd = [];
@@ -142,7 +155,9 @@ for ifnum = ifn1:ifn2
       %if(size(g.atime,1) ~= size(g.itime,1)) fprintf(1,'Unequal samples\n'); continue; end
       s.arad  = [s.arad, g.ra(achn,:)];                % [arad, [ra(achn,:); avaw]]; etc
       s.irad  = [s.irad, g.ri(ichn,:)];                % 1317 chns (12 guard chans)
-      s.drad  = [s.drad, g.i2ra(achn,:)];              %
+      s.i2ra  = [s.i2ra, g.i2ra(achn,:)];              %
+      s.a2rc  = [s.a2rc, g.ra2c(cchn,:)];
+      s.i2rc  = [s.i2rc, g.i2rc(cchn,:)];
       s.atim  = [s.atim, g.atime'];
       s.itim  = [s.itim, g.itime'];
       s.arlat = [s.arlat,g.alat'];              s.arlon = [s.arlon, g.alon'];
@@ -154,9 +169,13 @@ for ifnum = ifn1:ifn2
 %      s.alnfr = [s.alnfr, g.alandfrac'];       s.ilnfr = [s.clnfr,g.ilandfrac']; 
 %      s.iqual = [s.iqual, g.iqual'];
 %      s.iifv  = [s.iifv, g.iifov'];
-      s.avra  = [s.avra,nanmean(g.ra,2)];       s.sdra = [s.sdra,nanstd(g.ra,1,2)];  
-      s.avri  = [s.avri,nanmean(g.ri,2)];       s.sdri = [s.sdri,nanstd(g.ri,1,2)];
-      s.avrd  = [s.avrd,nanmean(g.i2ra,2)];     s.sdrd = [s.sdrd,nanstd(g.i2ra,1,2)];
+      s.avra    = [s.avra,nanmean(g.ra,2)];       s.sdra   = [s.sdra,nanstd(g.ra,1,2)];  
+      s.avri    = [s.avri,nanmean(g.ri,2)];       s.sdri   = [s.sdri,nanstd(g.ri,1,2)];
+      s.avri2c  = [s.avri2c,nanmean(g.i2rc,2)];   s.sdri2c = [s.sdri2c,nanstd(g.i2rc,1,2)];
+% ned quality control on ra2c
+        junk = real(g.ra2c);
+        inZ  = find(junk < -999);  junk(inZ) = NaN;
+      s.avra2c  = [s.avra2c,nanmean(junk,2)];   s.sdra2c = [s.sdra2c,nanstd(junk,1,2)];
 
       idy     = find(g.asolzen < 90);
       int     = find(g.asolzen >= 90);
@@ -188,12 +207,11 @@ for ifnum = ifn1:ifn2
 end    
 fprintf('\n');
 s.td2  = s.atim - s.itim;              % tdiff from JPL are all real positive :WRONG
-s.Wavs = aWavs;                       % used by sno_quantile.m
+s.Wavs = aWavs;                        % used by sno_quantile.m
 fprintf(1,'Total number of SNO pairs: %d\n',numel(s.td2));
 
 %{
-% plot options
-addpath /asl/matlib/plotutils                % aslprint.m
+% Sanity Check & plot options
 junk = ones(1,size(s.td2,2)); junk = s.td2*86400; junk = s.dsn;
 figure(1);clf;simplemap(s.arlat, s.arlon, junk); title('AIRS IASI SNO delay map (secs)');
   % aslprint('./figs/AirsIasi_SNO_delayMap.png');
@@ -204,36 +222,60 @@ figure(1);clf;hist(junk,200),xlim([0 22]);xlabel('Separation (km)'); ylabel('pop
 figure(1);clf;subplot(1,2,1);hist(s.arlat,1040);xlim([-78 -70]);
   subplot(1,2,2);hist(s.arlat,1040);xlim([70 78]);
    xlabel('latitude bin');ylabel('population');title('AIRS CRIS stnd SNO All data Distribution');
-
-
    % aslprint('AirsCris_AllSno_lat_hist.png')
 figure(3);clf;hist(abt(4,:),100); xlabel('B.T. (K)');ylabel('population');
    title('AIRS All Sample SNO 1414 wn population'); % set(gca, 'YScale', 'log')
    % aslprint('AirsIasi_AllSno_1414wn_hist.png')
 
+K=3;
+btairs  = real( rad2bt(fa,s.avra(:,K)) );
+   junk = single(hamm_app(double(s.avri(:,K))) );
+btiasi  = real( rad2bt(fiasi,junk));
+bta2c   = real( rad2bt(fa2c,s.avra2c(:,K)) );
+   junk = single( hamm_app(double(s.avri2c(:,K))) );
+bti2c   = real(rad2bt(fcris,junk));
+  whos btairs btiasi bta2c bti2c
+bands = [640, 1100; 1200, 1620; 2170, 2400];
+figure(2);clf;plot(fa,btairs,'b-',fiasi,btiasi,'g-');grid on;axis([bands(1,:) 210 250]);
+  title('2010.12 SNO AIRS (b) IASI (g) mean'); xlabel('wn cm^{-1}');ylabel('BT K');
+  %saveas(gcf,'./figs/201011_AI_SNO_AirsIasi_meanBT_MW.png','png');
+figure(3);clf;
+ h1=subplot(2,1,1);plot(fa2c,bta2c,'b-',fcris,bti2c,'g-');grid on; axis([bands(1,:) 210 250]);
+  title('2010.12 Airs.Iasi.SNO A2C (b) I2C (g) BT mean');ylabel('BT K');
+ h2=subplot(2,1,2);plot(fa2c,bta2c - bti2c(xc),'m-');grid on;axis([bands(1,:) -1 1]);
+  xlabel('wn cm^{-1}');ylabel('BT K');
+  linkaxes([h1 h2],'x');set(h1,'xticklabel','');
+  pp1=get(h1,'position');set(h1,'position',[pp1(1) pp1(2)-pp1(4)*0.1 pp1(3) pp1(4)*1.1])
+  pp2=get(h2,'position');set(h2,'position',[pp2(1) pp2(2)+pp2(4)*0.1 pp2(3) pp2(4)*1.1])  
+  %saveas(gcf,'./figs/201011_AI_SNO_A2C_I2C_meanBT_SW.png','png');
+
 %}
 
 % ********** SECTION II - Full spectrum all sample stats: ***********
 %            ============================================
-ratpm=0; ritpm=0; rdtpm=0; ratps=0; ritps=0; rdtps=0;
+ratpm=0; ritpm=0; ra2cm=0; ri2cm=0;
+ratps=0; ritps=0; ra2cs=0; ri2cs=0;
 
 for i = 1:numel(s.nSam)
   ratpm = ratpm + s.avra(:,i).*s.nSam(i);    ritpm = ritpm + s.avri(:,i).*s.nSam(i);
-  rdtpm = rdtpm + s.avrd(:,i).*s.nSam(i);
+  ra2cm = ra2cm + s.avra2c(:,i).*s.nSam(i);  ri2cm = ri2cm + s.avri2c(:,i).*s.nSam(i);
   ratps = ratps + ( s.sdra(:,i).*s.sdra(:,i) + s.avra(:,i).*s.avra(:,i) )*s.nSam(i);
   ritps = ritps + ( s.sdri(:,i).*s.sdri(:,i) + s.avri(:,i).*s.avri(:,i) )*s.nSam(i);
-  rdtps = rdtps + ( s.sdrd(:,i).*s.sdrd(:,i) + s.avrd(:,i).*s.avrd(:,i) )*s.nSam(i);
+  ra2cs = ra2cs + ( s.sdra2c(:,i).*s.sdra2c(:,i) + s.avra2c(:,i).*s.avra2c(:,i) )*s.nSam(i);
+  ri2cs = ri2cs + ( s.sdri2c(:,i).*s.sdri2c(:,i) + s.avri2c(:,i).*s.avri2c(:,i) )*s.nSam(i);
 end
-gavra = ratpm/sum(s.nSam);   gavri = ritpm/sum(s.nSam);    gavrd = rdtpm/sum(s.nSam);
-gsdra = real(sqrt( ratps/sum(s.nSam) - gavra.*gavra ));
-gsdri = real(sqrt( ritps/sum(s.nSam) - gavri.*gavri ));
-gsdrd = real(sqrt( rdtps/sum(s.nSam) - gavrd.*gavrd ));
-gsera = gsdra/sqrt(sum(s.nSam));   gseri = gsdri/sqrt(sum(s.nSam));
-gserd = gsdrd/sqrt(sum(s.nSam));
+gavra    = ratpm/sum(s.nSam);       gavri   = ritpm/sum(s.nSam);    
+gavra2c  = ra2cm/sum(s.nSam);       gavri2c = ri2cm/sum(s.nSam);
+gsdra    = real(sqrt( ratps/sum(s.nSam) - gavra.*gavra ));
+gsdri    = real(sqrt( ritps/sum(s.nSam) - gavri.*gavri ));
+gsdra2c  = real(sqrt( ra2cs/sum(s.nSam) - gavra2c.*gavra2c ));
+gsdri2c  = real(sqrt( ri2cs/sum(s.nSam) - gavri2c.*gavri2c ));
+gsera    = gsdra/sqrt(sum(s.nSam));      gseri   = gsdri/sqrt(sum(s.nSam));
+gsera2c  = gsdra2c/sqrt(sum(s.nSam));    gseri2c = gsdri2c/sqrt(sum(s.nSam));
 
-gavba = real(rad2bt(fa, gavra));    gavbi = real(rad2bt(fiasi, gavri));
-gavbd = real(rad2bt(fa, gavrd));
-bias  = gavbd-gavba;
+gavba    = real(rad2bt(fa, gavra));       gavbi   = real(rad2bt(fiasi, gavri));
+gavba2c  = real(rad2bt(fa2c, gavra2c));   gavbi2c = real(rad2bt(fi2c, gavri2c));
+bias     = gavbd-gavba;
 gdrsd = 0.5*sqrt( (gsdra.*gsdra + gsdrd.*gsdrd) );
 btm = 0.5*(gavba + gavbd);
   mdr = 1E-3*(1./drdbt(fa,btm) );
@@ -241,17 +283,18 @@ dbts  = mdr.*gdrsd;
 dbte  = dbts/sqrt(sum(s.nSam));
 
 %{
-% Plotting Options
- figure(1);clf;h1=subplot(2,1,1);plot(fa,gavba,'b-',fiasi,gavbi,'r-',fa,gavbd,'g-');
-   grid;axis([600 2700 210 270]);title('2015.6mo AIRS (b), IASI (r), I2A (g) SNO Mean');
-   legend('Airs 1b','Iasi','iasi2airs','location','north'); ylabel('BT (K)');
-  h2=subplot(2,1,2);plot(fa(nig),bias(nig),'m-',fa(nig),dbte(nig),'c-');grid;
-  axis([600 2700 -0.8 0.8]);xlabel('wn (cm-1)');ylabel('Bias A-I (K)');
+% Sanity Check & Plotting Options
+ figure(1);clf;h1=subplot(2,1,1);
+   plot(fa,gavba,'b-',fiasi,gavbi,'r-',fa2c,gavba2c,'g-',fi2c,gavbi2c,'c-');axis([bands(2,:) 210 255])
+   grid on;title('2011 AI SNO AIRS (b), IASI (r), A2C (g) I2C (c) Mean');
+   ylabel('BT (K)');legend('Airs 1b','Iasi','iasi2airs','location','north'); 
+  h2=subplot(2,1,2);plot(fa2c,bta2c - bti2c(xc),'.-');grid on;axis([bands(2,:) -0.8 0.8]);
+   xlabel('wn (cm-1)');ylabel('Bias K');
    legend('Airs - Iasi2Airs','location','north');
-   linkaxes([h1 h2],'x');set(h1,'xticklabel','');pp=get(h1,'position');
-   set(h1,'position',[pp(1) pp(2)-pp(4)*0.1 pp(3) pp(4)*1.1])
-   pp=get(h2,'position'); set(h2,'position',[pp(1) pp(2) pp(3) pp(4)*1.1]);
-   % aslprint('./figs/2015_6mo_AirsIasi_SNO_BTbiasSpectrum.png')
+   linkaxes([h1 h2],'x');set(h1,'xticklabel','');pp1=get(h1,'position');
+   set(h1,'position',[pp1(1) pp1(2)-pp1(4)*0.1 pp1(3) pp1(4)*1.1])
+   pp2=get(h2,'position'); set(h2,'position',[pp2(1) pp2(2) pp2(3) pp2(4)*1.1]);
+   % aslprint('./figs/2011_AI_SNO_A2C_I2C_BTbias_MW.png')
   AI.fa = fa; AI.fi = fi; AI.gavba = gavba; AI.gavbi = gavbi; AI.gavbd = gavbd; 
   AI.dbte = dbte; 
   % save('SNO_AI_201X_BTspect.mat','AI');

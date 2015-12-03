@@ -205,24 +205,46 @@ if(IASI)
   % expected files:
   % /asl/s1/chepplew/projects/sno/airs_iasi/JPL/airs_frm_sno_CAF_20070301.hdf
   % /asl/s1/chepplew/projects/sno/airs_iasi/JPL/sno_airs_iasi_20070301.mat
+  % /asl/s1/chepplew/projects/sno/airs_cris/LR/airs2cris_CAF_YYYYMMDD.mat
+
+  dp   = '/asl/s1/chepplew/projects/sno/airs_iasi/JPL/';
+  fstr = 'sno_airs_iasi_2011*.mat'; 
+  flst = dir(strcat(dp, fstr));
+  fprintf(1,'Found %d files to merge\n',numel(flst));
+
+  for ifn=1:numel(flst);
+    fnam   = flst(ifn).name; 
+    fprintf(1,'Processing: %s\n',fnam); 
+    sdate  = regexp(fnam,['\d+'],'match');  
+    hdfin  = strcat(dp,fnam);  
+    [zpath,znam,zext] = fileparts(hdfin);
+    fnsno  = [zpath,'/sno_airs_iasi_',sdate{1},'.mat'];
+    fncaf  = [zpath,'/airs_frm_sno_CAF_',sdate{1},'.hdf'];
+    fna2c  = [zpath,'/airs2cris_CAF_',sdate{1},'.mat'];
+    if(exist(fnsno) ~= 2) fprintf(1,'%s missing\n',fnsno); continue; end
+    if(exist(fncaf) ~= 2) fprintf(1,'%s missing\n',fncaf); continue; end
+    if(exist(fna2c) ~= 2) fprintf(1,'%s missing\n',fna2c); continue; end
+
+    ss     = h4sdread(fncaf);                      % L1c CAF fields [Nx2645] 3 x cell arrays
+    gg     = load(fna2c);                          % a2rc [1185xN], a2cfrq [1185x1]
+
+    matOb1 = matfile(fnsno,'Writable',true);
+    junk   = cell2mat(ss{1}(2))';                 % l1cRadiance {single} swap to [2645 x N]
+    matOb1.ral1c = junk;      clear junk;
+    junk   = cell2mat(ss{2}(2))';                 % l1cProc {uint8}
+    matOb1.l1cProc = junk;    clear junk;
+    junk   = cell2mat(ss{3}(2))';                 % l1cReason {uint8}
+    matOb1.l1cReason = junk;  clear junk;
+    junk   = single(gg.a2rc);                     % AIRS to CrIS {double complex} [1185 x N]
+    matOb1.ra2c  = junk;
+    junk   = single(gg.a2cfrq);                   % must retain grid from decon routines
+    matOb1.fa2c  = junk;
+    matOb1 = matfile(fnsno,'Writable',false);
+    clear junk ss gg matOb1;
+
+  end           % end for ifn
 
 
-  hdfin = hdfout; clear hdfout;  
-  ifn = 1;
-  [zpath,znam,zext] = fileparts(hdfin);
-  fnsno = [zpath,'/sno_airs_iasi_',sdate{1},'.mat'];
-  fp4   = [zpath,'/airs_frm_sno_CAF_',sdate{1},'.hdf'];
-  s     = h4sdread(fp4);
-  
-  matOb1 = matfile(fnsno,'Writable',true);
-  junk   = cell2mat(s{1}(2));                 % l1cRadiance
-  matOb1.ral1c = junk;      clear junk;
-  junk   = cell2mat(s{2}(2));                 % l1cProc
-  matOb1.l1cProc = junk;    clear junk;
-  junk   = cell2mat(s{3}(2));                 % l1cReason
-  matOb1.l1cReason = junk;  clear junk;
-  clear s;
-end
 if(CRIS)
   % expected files:
   % /asl/s1/chepplew/projects/sno/airs_cris/LR/airs2cris_CAF_YYYYMMDD.mat

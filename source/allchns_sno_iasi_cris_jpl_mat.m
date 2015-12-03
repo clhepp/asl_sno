@@ -60,7 +60,7 @@ prf  = yp;
 
 clear x cc ccs;
 dp = '/asl/s1/chepplew/projects/sno/iasi_cris/JPL/'; % standard/';
-unix(['cd ' dp '; find . -noleaf -type f -name ''sno_iasi_cris*.mat'' -printf ''%P\n'' > /tmp/fn.txt;']);
+unix(['cd ' dp '; find . -noleaf -maxdepth 1 -type f -name ''sno_iasi_cris*.mat'' -printf ''%P\n'' > /tmp/fn.txt;']);
 fh = fopen('/tmp/fn.txt');
 x  = fgetl(fh);
 i  = 1;
@@ -78,21 +78,21 @@ fprintf(1,'Found %d total SNO files\n',numel(ccs));
 
 dstart = datenum([nyr nmn ndy]);
 for i=1:numel(ccs)
-  junk = ccs{i}(15:22);
+  junk = ccs{i}(14:21);                                  % sno_iasi_cris20120401.mat
   thisdat = datenum( [str2num(junk(1:4)) str2num(junk(5:6)) str2num(junk(7:8))] );
-  if(thisdat <= dstart) ifn1 = i; end
+  if(thisdat <= dstart) ifn1 = 1; end
   %%if(thisdat <= dlast)  ifn2 = i; end
 end
-if(numel(ccs) > 36) ifn2 = ifn1 + 36;                      % only 36 SNO files from 2001/01/01.
-else ifn2 = ifn1 + numel(ccs);
+if(numel(ccs) > 36) ifn2 = ifn1 + numel(ccs);                      % only 36 SNO files from 2001/01/01.
+else ifn1 = 1; ifn2 = numel(ccs);
 end
 %fprintf(1,'Processing SNO files from: %s to %s\n',snoLst(ifn1).name, snoLst(ifn2).name);
 fprintf(1,'Processing SNO files from %s to %s\n',ccs{ifn1}, ccs{ifn2});
 
 clear g;
-s.td    = [];   s.crad = [;]; s.irad = [;]; s.drad = [;]; s.itim = [];  s.ctim = []; 
-s.clat  = [];   s.clon = [];  s.dsn  = [];  s.ilat = [];  s.ilon = []; s.csolz = [];
-s.iqual = [];  
+s.td    = [];   s.crad  = [;]; s.irad = [;]; s.drad = [;]; s.itim = [];  s.ctim = []; 
+s.clat  = [];   s.clon  = [];  s.dsn  = [];  s.ilat = [];  s.ilon = []; s.csolz = [];
+s.iqual = [];   s.isolz = [];
 %s.alnfr = [];  s.clnfr = []; s.cifv  = [];
 %a.nSam  = [];   a.avrd = [;]; a.avra = [;]; a.avrc = [;]; a.sdra = [;]; a.sdrc = [;]; 
 %a.sdrd  = [;];
@@ -104,10 +104,11 @@ for ifnum = ifn1:ifn2
       if( vars(5).size(1) == vars(17).size(1) )       % ensure same no. obs
         fprintf(1,'proc: %s\n', ccs{ifnum})
         g = load(strcat(dp,ccs{ifnum}));
-        s.irad  = [s.irad,  g.ri(ichns,:)];
+        s.irad  = [s.irad,  g.ri(xi(ichns),:)];
         s.crad  = [s.crad,  g.rc(ichns,:)];              % 
         s.drad  = [s.drad,  g.i2rc(ichns,:)];            %
         s.csolz = [s.csolz, g.csolzen'];
+	s.isolz = [s.isolz, g.isolzen'];
         s.iqual = [s.iqual, g.iqual'];
       else
         fprintf(1,'unequal skip: %d\n',ifnum);
@@ -128,29 +129,31 @@ fprintf(1,'number of SNO pairs: %d\n', ny);
 
 % quality control
 inq = find(s.iqual ~= 0);
-s.drad(inq) = NaN;  s.crad(inq) = NaN;  s.irad(inq) = NaN;   % need to match pairs.
 fprintf(1,'Found %d bad i2ra radiances\n',numel(inq));
+s.drad(inq) = NaN;  s.crad(inq) = NaN;  s.irad(inq) = NaN;   % need to match pairs.
 
 % subset night (for SW band :- igrp=3)
-idn = ':';                              % include all scenes for LW and MW bands
+idn = ':';                                                    % include all scenes for LW and MW bands
 if(igrp == 3 )
-  idn = find(s.csolz > 100);
+  idn = find(s.csolz > 95 & s.isolz > 95);
   fprintf(1,'Found %d night\n',numel(idn));
 end
  
 % convert Obs to BT
-%ibt  = real(rad2bt(fiasi(achns),s.irad));
+ibt   = real(rad2bt(fiasi(xi(ichns))',s.irad(:,idn)) );
 junk  = real( rad2bt(fcris(ichns),s.crad(:,idn)) );
 cbt   = single(hamm_app(double(junk))); 
 dbt   = real( rad2bt(fcris(ichns),s.drad(:,idn)) ); 
 crad  = s.crad(:,idn);  
 cbm   = nanmean(cbt,2); 
-dbm   = nanmean(dbt,2);         
-whos cbt dbt crad s cbm dbm
+dbm   = nanmean(dbt,2); 
+ibm   = nanmean(ibt,2);       
+whos cbt dbt ibt crad s cbm dbm ibm
 
 %{ 
 % Sanity check
-figure(1);clf;plot(fcris(ichns),cbm,'b-',fcris(ichns),dbm,'g-');grid on;
+figure(1);clf;plot(fcris(ichns),cbm,'b-',fcris(ichns),dbm,'g-',);grid on;
+figure(1);clf;plot(fcris(ichns),cbm - dbm, 'm.-');grid on;axis([bands(igrp,:) -1 1]);
 %}
 
 % create the scene bins for each channel
@@ -284,9 +287,12 @@ addpath /asl/matlib/plotutils              % aslprint.m
 jj = 200;
 bincen = wmstats.bins{jj};                 % qsBins(jj,1:end-1);
 figure(1);clf;
-  subplot(2,1,1);plot(bincen,btbias(jj,:),'k.-',bincen,btser(jj,:),'r-');grid on;
-    axis([190 300 -1 1]);
-  subplot(2,1,2);semilogy(bincen,binsz(jj,:));axis([190 300 50 20000]);grid on;
+  h1=subplot(2,1,1);plot(bincen,btbias(jj,:),'k.-',bincen,btser(jj,:),'r-');grid on;
+    axis([150 280 -20 1]);title('IC SNO Night Scene Dep. ch:2487wn');
+  h2=subplot(2,1,2);semilogy(bincen,binsz(jj,:));axis([150 280 50 20000]);grid on;xlabel('Scene K');
+  linkaxes([h1 h2],'x');set(h1,'xticklabel','');pp=get(h1,'position');
+  set(h1,'position',[pp(1) pp(2)-pp(4)*0.1 pp(3) pp(4)*1.1])
+  pp=get(h2,'position'); set(h2,'position',[pp(1) pp(2) pp(3) pp(4)*1.1]);
 figure(2);clf;subplot(2,1,1)
   plot(bincen(blo(jj,1):bhi(jj,1)),btbias(jj,blo(jj,1):bhi(jj,1)));grid on;
  subplot(2,1,2);plot(bincen(blo(jj,2):bhi(jj,2)),btbias(jj,blo(jj,2):bhi(jj,2)));grid on;
@@ -295,7 +301,7 @@ figure(3);clf;h1=subplot(2,1,1);plot(wmstats.wn,wmstats.cbm,'b-',wmstats.wn,wmst
   grid on;title('CrIS (b) IASI (g) 2012-14 SNO mean BT');ylabel('BT K');xlim(bands(igrp,:));
   h2=subplot(2,1,2);plot(wmstats.wn,wmstats.cbm - wmstats.dbm,'m.-');
   grid on;xlabel('wavenumber');ylabel('BT Bias K');axis([bands(igrp,:) -0.7 0.7]);
-  legend('CrIS - IASI','Location','North');
+  legend('IASI - CrIS','Location','North');
   %%ha=findobj(gcf,'type','axes');set(ha(1),'ylim',[-Inf Inf]);
   linkaxes([h1 h2],'x');set(h1,'xticklabel','');pp=get(h1,'position');
   set(h1,'position',[pp(1) pp(2)-pp(4)*0.1 pp(3) pp(4)*1.1])

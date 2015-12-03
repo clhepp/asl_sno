@@ -56,7 +56,7 @@ prf  = yp;
 
 clear x cc ccs;
 dp = '/asl/s1/chepplew/projects/sno/airs_iasi/JPL/'; % standard/';
-unix(['cd ' dp '; find . -noleaf -type f -name ''sno_airs_iasi_*.mat'' -printf ''%P\n'' > /tmp/fn.txt;']);
+unix(['cd ' dp '; find . -noleaf -maxdepth 1 -type f -name ''sno_airs_iasi_*.mat'' -printf ''%P\n'' > /tmp/fn.txt;']);
 fh = fopen('/tmp/fn.txt');
 x  = fgetl(fh);
 i  = 1;

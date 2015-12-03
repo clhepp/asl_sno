@@ -1,11 +1,12 @@
-function proc_airs_to_cris_hdf()
+function proc_airs_to_cris_hdf(job_file)
 
 % function proc_airs_to_cris()
 %
 % Synopsis: converts AIRS spectrum to CRIS and appends the data to the
 %   original file (as required by downstream SNO processors).
 %
-% INPUT:  jobNam: string supplied by mstr_airs_to_cris_mat.m
+% INPUT:  job_file: string supplied by mstr_airs_to_cris_mat.m
+%         e.g. /home/chepplew/gitLib/asl_sno/run/airs2cris_iasi_jobs_hdf_01.txt';
 % 
 % OUTPUT:  <fsav> constructed from the path of the input file names + 
 %         'aris2cris_CAF_YYYYMMDD.mat'     
@@ -15,7 +16,7 @@ function proc_airs_to_cris_hdf()
 %
 %
 
-cd /home/chepplew/projects/sno/sno_git_repo/run   % same dir as jobs list.
+cd /home/chepplew/gitLib/asl_sno/run              % same dir as jobs list.
 
 addpath /asl/packages/ccast/source                %
 addpath /asl/matlib/h4tools                       %  
@@ -24,26 +25,29 @@ addpath /asl/packages/airs_decon/source           %
 nslurm  = str2num(getenv('SLURM_ARRAY_TASK_ID'));
 
 % check job list file (MUST contain full paths):
-res = exist('./jobs_airs_to_cris_hdf_2012b.txt','file');
-if(res ~= 2) fprintf(1,'Error: JobList file not found\n'); exit; end
-FH  = fopen('./jobs_airs_to_cris_hdf_2012b.txt','r');
- junk = textscan(FH,'%s');                 % cell array
+%%res = exist('./jobs_airs_to_cris_hdf_2012b.txt','file');
+res = exist(job_file,'file');
+if(res ~= 2) fprintf(1,'Error: Job file not found\n'); end
+FH  = fopen(job_file,'r');
+ junk = textscan(FH,'%s');                        % cell array
 fclose(FH);
-instr = cell2mat(junk{1}(nslurm));
+if(nslurm) instr = cell2mat(junk{1}(nslurm)); end
+if(isempty(nslurm)) instr = cell2mat(junk{1}(2)); end     % junk{1}(k) manually select line
 [xpath,xnam,ext] = fileparts(instr);
+fprintf(1,'Processing: %s\n', instr);
 
 % deconvolution setup
-bfile = '/asl/s1/chepplew/tmp/bconv4.mat';        % deconvolution temp file
-dvb = 0.1;                                        % deconvolution frequency step
-fig = 'fig';                                      % plot type
+bfile  = '/asl/s1/chepplew/tmp/bconv4.mat';          % deconvolution temp file
+dvb    = 0.1;                                        % deconvolution frequency step
+fig    = 'fig';                                      % plot type
 dohamm = 1;
-sfile = '/asl/matlab2012/srftest/srftables_m140f_withfake_mar08.hdf';
-cfreq = load('/home/chepplew/gitLib/airs_deconv/test/freq2645.txt');
+sfile  = '/asl/matlab2012/srftest/srftables_m140f_withfake_mar08.hdf';
+cfreq  = load('/home/chepplew/gitLib/airs_deconv/test/freq2645.txt');
 opt5.dvb    = dvb;
 opt5.bfile  = bfile;
-opt5.hapod  = 1;             % set airs2cris to perform Hamming apodization
+opt5.hapod  = 1;                                 % set airs2cris to perform Hamming apodization
 
-  g = h4sdread( instr );
+  g    = h4sdread( instr );
   junk = regexp(xnam,'(_CAF_)[\d.]+(.)','match');
   fsav = char(strcat(xpath, '/airs2cris', junk, '.mat'));
   ra1c = cell2mat(g{1}(2));                       % need [2645 x N] swap row/col if needed.
@@ -55,7 +59,7 @@ opt5.hapod  = 1;             % set airs2cris to perform Hamming apodization
   end
   
   % convert AIRS to CRIS
-  drad = [;];
+  drad   = [;];
   sz     = size(ra1c,2);
   fprintf(1,'no. of samples: %d\n',sz);
   lftovr = mod(sz,1000);
@@ -77,9 +81,10 @@ opt5.hapod  = 1;             % set airs2cris to perform Hamming apodization
     drad = [drad, rr5];
   end
   fprintf(1,'\n');
-  frq = ff;
+  a2cfrq = ff;
+  a2rc   = drad;
 
   fprintf(1,'saving file: %s\n',fsav);  
-  save(fsav, 'drad', 'frq')
+  save(fsav, 'a2rc', 'a2cfrq')
 
 end

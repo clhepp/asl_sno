@@ -22,11 +22,12 @@ clearvars s a wmstats g -except sdate igrp;
 
 cd /home/chepplew/gitLib/asl_sno/run
 addpath /home/chepplew/gitLib/asl_sno/source
-addpath /home/chepplew/gitLib/asl_sno/data       % cris_freq_*.mat
+addpath /home/chepplew/gitLib/asl_sno/data        % cris_freq_*.mat
 addpath /home/chepplew/myLib/matlib/aslutil       % rad2bt.m
 addpath /home/strow/Git/breno_matlab/Math         % Math_bin.m
 addpath /asl/matlab2012/aslutil/                  % drdbt.m
 addpath /asl/packages/ccast/source                % seq_match.m
+addpath /asl/packages/airs_decon/source           % hamm_app
 
 % set up the dates to process:
 if (length(sdate) ~= 10) fprintf(1,'Error in date\n'); exit; end
@@ -37,6 +38,7 @@ nyr = str2num(syr); nmn = str2num(smn);  ndy = str2num(sdy);
 if (igrp < 1 || igrp > 6) fprintf(1,'igrp out of range (1 to 6)\n'); exit; end
 ichns = [(igrp-1)*200 + 1:igrp*200];                        % applies to the AIRS to CRIS
 if(igrp == 6) ichns = [1001:1185]; end
+fprintf(1,'Doing channels %d to %d\n', ichns(1),ichns(end));
 
 % load the frequency grids:
 xx=load('/asl/data/airs/airs_freq.mat'); fa=xx.freq; clear xx;
@@ -57,7 +59,7 @@ prf  = yp;
 
 clear x cc ccs;
 dp = '/asl/s1/chepplew/projects/sno/airs_cris/v10_0_0/standard/'; % standard/';
-unix(['cd ' dp '; find . -noleaf -type f -name ''sno_airs_cris_2013*.mat'' -printf ''%P\n'' > /tmp/fn.txt;']);
+unix(['cd ' dp '; find . -noleaf -maxdepth 1 -type f -name ''sno_airs_cris_2013*.mat'' -printf ''%P\n'' > /tmp/fn.txt;']);
 fh = fopen('/tmp/fn.txt');
 x  = fgetl(fh);
 i  = 1;
@@ -95,11 +97,11 @@ s.arlat = [];  s.arlon = [];  s.dsn  = []; s.crlat = []; s.crlon = []; s.csolz =
 for ifnum = ifn1:ifn2
   %vars = whos('-file',strcat(dp,snoLst(ifnum).name));
   vars = whos('-file',strcat(dp,ccs{ifnum}));
-  if( ismember('raDecon', {vars.name}) )              % AIRS->CrIS is present
+  if( ismember('raDecon', {vars.name}) )                   % AIRS->CrIS is present
     %if(snoLst(ifnum).bytes > 1.0E4)
       %g = load(strcat(dp,snoLst(ifnum).name));
       g = load(strcat(dp,ccs{ifnum}));
-      %%s.arad  = [s.arad, g.ra(achns,:)];                % [arad, [ra(achn,:); avaw]]; etc
+      %%s.arad  = [s.arad, g.ra(achns,:)];                 % [arad, [ra(achn,:); avaw]]; etc
       s.crad  = [s.crad, g.rc(xc(ichns),:)];                % 1317 chns (12 guard chans)
       s.drad  = [s.drad, g.raDecon(xd(ichns),:)];           %
 
@@ -113,13 +115,16 @@ fprintf(1,'number of SNO pairs: %d\n', ny);
   
 % convert Obs to BT
 %%abt  = real(rad2bt(fa(achns),s.arad));
-cbt  = real(rad2bt(fc(xc(ichns)),s.crad)); 
-dbt  = real(rad2bt(fd(xd(ichns)),s.drad)); 
-crad = s.crad;  
-cbm  = nanmean(cbt,2); 
-dbm  = nanmean(dbt,2);         
-whos cbt dbt crad s cbm dbm
-
+junk  = real( rad2bt(fc(xc(ichns)),s.crad) );
+cbt   = single(hamm_app(double(junk))); 
+%%%cbt  = real(rad2bt(fc(xc(ichns)),s.crad)); 
+junk  = real(rad2bt(fd(xd(ichns)),s.drad)); 
+dbt   = single(hamm_app(double(junk)));
+crad  = s.crad;  
+cbm   = nanmean(cbt,2); 
+dbm   = nanmean(dbt,2);         
+whos cbt dbt crad cbm dbm
+s
 
 % create the scene bins for each channel
 clear qaBins qxBins qdBins qx qa qd qsBins;
@@ -144,32 +149,36 @@ for jj = 1:numel(ichns)
   for i = 1:length(dbin)
     binsz(jj,i)   = length(ubinInd{i});
     btbias(jj,i)  = nanmean( dbt(jj,ubinInd{i}) - cbt(jj,ubinInd{i}) );
-    radstd(jj,i)  = nanstd( s.drad(jj,ubinInd{i}) - crad(jj,ubinInd{i}) );
+    radstd(jj,i)  = nanstd( s.drad(jj,ubinInd{i}) - s.crad(jj,ubinInd{i}) );
     cdbm(i)    = 0.5*( nanmean(dbt(jj,ubinInd{i})) + nanmean(cbt(jj,ubinInd{i})) );
       mdr      = 1E-3*( 1./drdbt(fd(jj),cdbm(i)) );
     btstd(jj,i)   = mdr.*radstd(jj,i);  
     btser(jj,i)   = btstd(jj,i)./sqrt(binsz(jj,i));
     %%bias250(jj,i) = btbias(jj,i)./drd250(jj);                 % option hard wired
   end
+  jtot  = sum(binsz(jj,:));
+  jmdr  = 1E-3*( 1./drdbt(fd(jj),cbm(jj)) );
+  jbtse = jmdr.* nanstd(s.drad(jj,:) - s.crad(jj,:),1,2) / sqrt(jtot);
   fprintf(1,'.');
 end
 fprintf(1,'\n');
 
 % parameter fitting section
 % -------------------------
-wmstats = struct; blo =[]; bhi = [];
-wmstats.cbm = cbm;
-wmstats.dbm = dbm;
-wmstats.wn  = fd(xd(ichns));
+wmstats       = struct; blo =[]; bhi = [];
+wmstats.cbm   = cbm;
+wmstats.dbm   = dbm;
+wmstats.wn    = fd(xd(ichns));
+wmstats.binsz = binsz;
 
 for jj = 1:numel(ichns)
   clear junk;
   wmstats.bias{jj}  = btbias(jj,:);
   wmstats.btser{jj} = btser(jj,:);
-  wmstats.bins{jj}  = qsBins(jj,1:end-1);
+  wmstats.binbt{jj} = qsBins(jj,1:end-1);
 
   % range select by bin size and hot scenes
-  inband = find(binsz(jj,:) > 500);
+  inband    = find(binsz(jj,:) > 500);
   blo(jj,1) = min(inband); 
   bhi(jj,1) = max(inband);                                      % was min(max(inband), find(qsBins(jj,:) > 297,1));
   % range select by std err - deal with non-monotonic var at tails
@@ -235,7 +244,7 @@ save(savfn,'wmstats');
 jj = 90;
 sfnam = fieldnames(wmstats);
 disp([wmstats.wn(jj)]);
-for i = 7:numel(sfnam)
+for i = 8:numel(sfnam)
   disp([wmstats.(sfnam{i})(jj,:)]);
 end
 
@@ -256,11 +265,11 @@ figure(3);clf;h1=subplot(2,1,1);plot(wmstats.wn,wmstats.cbm,'b-',wmstats.wn,wmst
   grid on;title('Airs (g) CrIS (b) 2013 6mos SNO mean BT');ylabel('BT K');
   h2=subplot(2,1,2);plot(wmstats.wn,wmstats.cbm - wmstats.dbm,'m.-');
   grid on;xlabel('wavenumber');ylabel('BT Bias K');
-  ha=findobj(gcf,'type','axes');set(ha(1),'ylim',[-6 4]);
+  ha=findobj(gcf,'type','axes');set(ha(1),'ylim',[-1 1]);
   linkaxes([h1 h2],'x');set(h1,'xticklabel','');pp=get(h1,'position');
   set(h1,'position',[pp(1) pp(2)-pp(4)*0.1 pp(3) pp(4)*1.1])
   pp=get(h2,'position'); set(h2,'position',[pp(1) pp(2) pp(3) pp(4)*1.1]);
-  aslprint(['./figs/AC_SNO_2013a_chns' sprintf('%d',igrp) '.png']);
+  %aslprint(['./figs/AC_SNO_2013a_chns' sprintf('%d',igrp) '.png']);
 
 %{
 there is one structure: wmstats
@@ -269,9 +278,10 @@ wmstats =
       cbm: [200x1 single]
       dbm: [200x1 single]
        wn: [1x200 double]
+    binsz: [200x200 double]
      bias: {1x200 cell}
     btser: {1x200 cell}
-     bins: {1x200 cell}
+    binbt: {1x200 cell}
         b: [200x3 single]
        mx: [200x3 single]
        mn: [200x3 single]
@@ -284,9 +294,10 @@ wmstats =
 wn    = wavenumber of the channel (on the common grid). 
 cbm   = mean CrIS BT spectrum (for the 200 channels in group)
 dbm   = mean AIRS-to-CrIS BT spectrum (ditto)
+binsz = 
 bias  = the BT bias A-C for the 200 scene bins.
 btser = the standard error for the bias for the 200 scene bins.
-bins  = the scene bins used for the bias calcs.
+binbt = the scene bin brightness temperature used for the bias calcs. (K)
 b     = 3 x weighted average values per channel:(full range; 
       restricted range by sample size, restricted range by std.err)
 mx: 3 x maximum BT bias (K) for repsective channel and range.
