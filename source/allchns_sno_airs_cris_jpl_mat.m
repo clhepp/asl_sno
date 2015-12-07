@@ -4,9 +4,9 @@ function wmstats = allchns_sno_airs_cris_jpl_mat(sdate, igrp)
 
 % INPUT: sdate calendar date to start collection
 %        e.g. sdate='2013/01/02';
-%        igrp - the group number for the channels in multiples of 200.
+%        igrp - the group number for the channels in multiples of 400.
 %           selected to cover the common grid channels (1185)
-%           valid range 1:6.
+%           valid range 1:3.
 %
 % OUTPUT: wmstats - see notes at bottom for details
 %
@@ -35,9 +35,9 @@ syr = sdate(1:4);   smn = sdate(6:7);    sdy = sdate(9:10);
 nyr = str2num(syr); nmn = str2num(smn);  ndy = str2num(sdy);
 
 % set up the channels to process (applies to the common grid):
-if (igrp < 1 || igrp > 6) fprintf(1,'igrp out of range (1 to 6)\n'); exit; end
-ichns = [(igrp-1)*200 + 1:igrp*200];                        % applies to the AIRS to CRIS
-if(igrp == 6) ichns = [1001:1185]; end
+if (igrp < 1 || igrp > 3) fprintf(1,'igrp out of range (1 to 6)\n'); exit; end
+ichns = [(igrp-1)*400 + 1:igrp*400];                        % applies to the AIRS to CRIS
+if(igrp == 3) ichns = [801:1185]; end
 fprintf(1,'Doing channels %d to %d\n', ichns(1),ichns(end));
 
 % load the frequency grids:
@@ -88,6 +88,7 @@ ifn2 = ifn1 + 60;                        % only 10 SNO days
 fprintf(1,'Processing SNO files from %s to %s\n',ccs{ifn1}, ccs{ifn2});
 
 clear g;
+s = struct;
 s.td    = [];   s.arad = [;]; s.crad = [;]; s.drad = [;]; s.ctim = [];  s.atim = []; 
 s.arlat = [];  s.arlon = [];  s.dsn  = []; s.crlat = []; s.crlon = []; s.csolz = [];  
 %s.alnfr = [];  s.clnfr = []; s.cifv  = [];
@@ -114,6 +115,7 @@ fprintf(1,'\n');
 fprintf(1,'number of SNO pairs: %d\n', ny);
   
 % convert Obs to BT
+clear junk abt cbt dbt cbm dbm;
 %%abt  = real(rad2bt(fa(achns),s.arad));
 junk  = real( rad2bt(fc(xc(ichns)),s.crad) );
 cbt   = single(hamm_app(double(junk))); 
@@ -127,7 +129,7 @@ whos cbt dbt crad cbm dbm
 s
 
 % create the scene bins for each channel
-clear qaBins qxBins qdBins qx qa qd qsBins;
+clear qsBins qxBins qdBins qx qd;
 qxBins.B = quantile(cbt,prf,2);
 qdBins.B = quantile(dbt,prf,2);
 qx       = cell2mat(struct2cell(qxBins));
@@ -235,13 +237,13 @@ end
 
 % save file
 % ---------
-savfn = ['sno_AC_wmstats_2013_chns200x' sprintf('%02d',igrp) '.mat'];
+savfn = ['sno_AC_wmstats_2013_chns400x' sprintf('%02d',igrp) '.mat'];
 fprintf(1,'Saving: %s\n',savfn);
 save(savfn,'wmstats');
 
 % display summary of results for selected channel
 % -----------------------------------------------
-jj = 90;
+jj = 10;
 sfnam = fieldnames(wmstats);
 disp([wmstats.wn(jj)]);
 for i = 8:numel(sfnam)
@@ -252,24 +254,24 @@ end
 % ----------------
 addpath /asl/matlib/plotutils              % aslprint.m
 jj = 90;
-bincen = qsBins(jj,1:end-1);
+bincen = wmstats.binbt{jj}; %qsBins(jj,1:end-1);
 figure(1);clf;
-  subplot(2,1,1);plot(bincen,btbias(jj,:),'k.-',bincen,btser(jj,:),'r-');grid on;
+  subplot(2,1,1);plot(bincen,wmstats.bias{jj},'k.-',bincen,wmstats.btser{jj},'r-');grid on;
     axis([200 300 -2 2]);
-  subplot(2,1,2);semilogy(bincen,binsz(jj,:));axis([200 300 50 20000]);grid on;
+  subplot(2,1,2);semilogy(bincen,wmstats.binsz(jj,:));axis([200 300 50 20000]);grid on;
 figure(2);clf;subplot(2,1,1)
   plot(bincen(blo(jj,1):bhi(jj,1)),btbias(jj,blo(jj,1):bhi(jj,1)));grid on;
  subplot(2,1,2);plot(bincen(blo(jj,2):bhi(jj,2)),btbias(jj,blo(jj,2):bhi(jj,2)));grid on;
 
 figure(3);clf;h1=subplot(2,1,1);plot(wmstats.wn,wmstats.cbm,'b-',wmstats.wn,wmstats.dbm,'g-');
   grid on;title('Airs (g) CrIS (b) 2013 6mos SNO mean BT');ylabel('BT K');
-  h2=subplot(2,1,2);plot(wmstats.wn,wmstats.cbm - wmstats.dbm,'m.-');
-  grid on;xlabel('wavenumber');ylabel('BT Bias K');
-  ha=findobj(gcf,'type','axes');set(ha(1),'ylim',[-1 1]);
-  linkaxes([h1 h2],'x');set(h1,'xticklabel','');pp=get(h1,'position');
-  set(h1,'position',[pp(1) pp(2)-pp(4)*0.1 pp(3) pp(4)*1.1])
-  pp=get(h2,'position'); set(h2,'position',[pp(1) pp(2) pp(3) pp(4)*1.1]);
-  %aslprint(['./figs/AC_SNO_2013a_chns' sprintf('%d',igrp) '.png']);
+  h2=subplot(2,1,2);plot(wmstats.wn,wmstats.dbm - wmstats.cbm,'m.-');ylim([-1 1]);
+  grid on;xlabel('wavenumber');ylabel('BT Bias K');legend('A2C - CrIS','Location','north');
+  %%ha=findobj(gcf,'type','axes');set(ha(1),'ylim',[-1 1]);
+  linkaxes([h1 h2],'x');set(h1,'xticklabel','');pp1=get(h1,'position');
+  set(h1,'position',[pp1(1) pp1(2)-pp1(4)*0.1 pp1(3) pp1(4)*1.1])
+  pp2=get(h2,'position'); set(h2,'position',[pp2(1) pp2(2)+pp2(4)*0.1 pp2(3) pp2(4)*1.1]);
+  %aslprint(['./figs/AC_SNO_2013a_SWchns' sprintf('%d',igrp) '.png']);
 
 %{
 there is one structure: wmstats

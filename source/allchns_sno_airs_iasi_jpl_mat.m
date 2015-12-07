@@ -33,16 +33,20 @@ if (length(sdate) ~= 10) fprintf(1,'Error in date\n'); exit; end
 syr = sdate(1:4);   smn = sdate(6:7);    sdy = sdate(9:10);
 nyr = str2num(syr); nmn = str2num(smn);  ndy = str2num(sdy);
 
-% set up the channels to process (applies to the common grid):
-if (igrp < 1 || igrp > 6) fprintf(1,'igrp out of range (1 to 6)\n'); exit; end
-ichns = [(igrp-1)*400 + 1:igrp*400];                        % applies to the IASI->AIRS
-if(igrp == 6) ichns = [2001:2378]; end
-fprintf(1,'Doing channels %d to %d\n',ichns(1),ichns(end));
-
 % load the frequency grids:
 xx=load('/asl/data/airs/airs_freq.mat'); fa=xx.freq; clear xx;
-load('/asl/data/iremis/danz/iasi_f.mat');                  % fiasi [8461x1]
-[xa xi] = seq_match(sort(fa), fiasi);
+load('/asl/data/iremis/danz/iasi_f.mat');                         % fiasi [8461x1]
+xx=load('/asl/s1/chepplew/projects/sno/airs_iasi/JPL/airs2cris_CAF_20101101.mat'); fa2c=xx.a2cfrq; clear xx;
+xx=load('cris_freq_2grd.mat');  fcris = xx.vchan'; clear xx;       % 1317 chns (12 guard chans)
+
+% set up the channels to process (applies to the common CrIS grid):
+if (igrp < 1 || igrp > 3) fprintf(1,'igrp out of range (1 to 3)\n'); exit; end
+cchns = [(igrp-1)*400 + 1:igrp*400];                        % applies to the IASI->AIRS
+if(igrp == 3) ichns = [801:1317]; end
+fprintf(1,'Doing CrIS channels %d to %d\n',cchns(1),cchns(end));
+% subset between the I2C [1317] and A2C grids [1185]
+[xa2c xc] = seq_match(fa2c, fcris);
+
 
 % Get quantile profiler and set to prf.
 %load('/home/strow/Matlab/Sno/prob_vector.mat');  p = p(1:200:end);
@@ -84,7 +88,8 @@ ifn2 = ifn1 + 36;                        % only 36 SNO files from 2001/01/01.
 fprintf(1,'Processing SNO files from %s to %s\n',ccs{ifn1}, ccs{ifn2});
 
 clear g;
-s.td    = [];   s.arad = [;]; s.irad = [;]; s.drad = [;]; s.itim = [];  s.atim = []; 
+s.td    = [];   s.arad = [];  s.irad = [];  s.ra2c = [];  s.i2rc = []; s.i2ra = [];
+s.itim = [];  s.atim = []; 
 s.arlat = [];  s.arlon = [];  s.dsn  = []; s.ialat = []; s.ialon = []; s.csolz = [];
 s.iqual = [];  
 %s.alnfr = [];  s.clnfr = []; s.cifv  = [];
@@ -97,9 +102,12 @@ for ifnum = ifn1:ifn2
     %if(snoLst(ifnum).bytes > 1.0E4)
       if( vars(4).size(1) == vars(15).size(1) )         % ensure same no. obs
       g = load(strcat(dp,ccs{ifnum}));
-      s.arad  = [s.arad, g.ra(ichns,:)];              % 
-      s.drad  = [s.drad, g.i2ra(ichns,:)];         %
-      s.iqual = [s.iqual, g.iqual'];
+      %%s.arad  = [s.arad, g.ra(achns,:)];                % 
+      %%s.irad  = [s.drad, g.i2ra(ichns,:)];              %
+      s.ra2c  = [s.ra2c, g.ra2c(cchns,:)];              % 
+      %%s.i2ra  = [s.i2ra, g.i2ra(achns,:)];              %
+      s.i2rc  = [s.i2rc, g.i2rc(cchns,:)];
+      %%s.iqual = [s.iqual, g.iqual'];
       end
     %end
   end
@@ -107,7 +115,7 @@ for ifnum = ifn1:ifn2
 end
 clear g;
 fprintf(1,'\n');
-[nx ny] = size(s.drad);
+[nx ny] = size(s.ra2c);
 fprintf(1,'number of SNO pairs: %d\n', ny);
 
 % quality control
@@ -116,6 +124,7 @@ s.drad(inq) = NaN;  s.arad(inq) = NaN;                 % need to match pairs.
 fprintf(1,'Found %d bad i2ra radiances\n',numel(inq));
  
 % convert Obs to BT
+clear abt ibt a2cbt i2cbt abm ibm a2cbm i2cbm
 %%abt  = real(rad2bt(fa(achns),s.arad));
 abt  = real(rad2bt(fa(ichns),s.arad)); 
 dbt  = real(rad2bt(fa(ichns),s.drad)); 

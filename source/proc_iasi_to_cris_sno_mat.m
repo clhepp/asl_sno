@@ -1,9 +1,11 @@
 function proc_iasi_to_cris_sno_mat()
 
-% Takes IASI spectral observations from IASI CrIS SNO files obtained from JPL
+% Takes IASI spectral observations from {IASI CrIS} or {AIRS IASI} SNO files obtained from JPL
 %   converts then to the CrIS grid and saves them back to the original SNO
 %   file.
 %
+% set CRIS and AIRS to either 0,1. to use the paired sensor with IASI.
+
 % C Hepplewhite
 %
 % version 1: Nov 2015.
@@ -21,12 +23,10 @@ xx=load('cris_freq_2grd.mat');  fcris = xx.vchan; clear xx;    % 1317 chns (12 g
 
 if(CRIS)
   dp    = '/asl/s1/chepplew/projects/sno/iasi_cris/JPL/';
-  fn    = 'sno_iasi_cris20130201.mat';
   fpatt = '''sno_iasi_cris*.mat''';               % 3x' required to include ' in the variable
 end
-if(IASI)
+if(AIRS)
   dp    = '/asl/s1/chepplew/projects/sno/airs_iasi/JPL/';
-  fn    = 'sno_iasi_cris20130201.mat';
   fpatt = '''sno_airs_iasi_2011*.mat''';               % 3''' required to include ' in the variable
 end
 
@@ -53,7 +53,7 @@ opt1.nguard  = 2;                                  % 2 guard channels per band e
 for ifn = 1:numel(ccs)
   g = load(strcat(dp,ccs{ifn}));
   if(numel(g.ilat) > 100)
-    if(~isfield(g, 'i2rc'))
+    %%if(~isfield(g, 'i2rc'))
       fprintf(1,'processing: %s\n',ccs{ifn}); 
       [xrad xfrq] = iasi2cris(g.ri,fiasi,opt1);
 
@@ -62,9 +62,9 @@ for ifn = 1:numel(ccs)
       matfn.i2rc = i2rc;
       matfn.fi2c = fi2c;
       matfn = matfile( strcat(dp,ccs{ifn}),'Writable',false );
-    else
-      fprintf(1,'skip %d\n',ifn)
-    end 
+    %%else
+    %%  fprintf(1,'skip %d\n',ifn)
+    %%end 
   else
     fprintf(1,'skip %d\n',ifn)
   end
@@ -75,14 +75,19 @@ end
 %clear g;
 
 %{ 
-% Sanity check
-cbt = real(rad2bt(fcris,g.rc));
-ibt = real(rad2bt(fiasi,g.ri));
-dbt = real(rad2bt(fcris,g.i2rc));
-cbm = mean(cbt,2);
-ibm = mean(ibt,2);
-dbm = mean(dbt,2);
+% Sanity check - pick one file and re-load g.
+clear cbt ibt dbt cbm ibm dbm
+junk = single(hamm_app(double(g.rc)));
+  cbt = real(rad2bt(fcris,junk));
+junk = single(hamm_app(double(g.ri)));
+  ibt = real(rad2bt(fiasi,junk));
+junk = single(hamm_app(double(g.i2rc)));
+  dbt = real(rad2bt(fcris,junk));
+cbm = nanmean(cbt,2);
+ibm = nanmean(ibt,2);
+dbm = nanmean(dbt,2);
+whos cbt ibt dbt cbm ibm dbm 
 
-figure(1);clf;plot(fcris,cbm,'b',fiasi,ibm,'g',fcris,dbm,'r');grid on;
-figure(1);clf;plot(fcris,cbm - dbm, 'm');grid on;
+figure(1);clf;plot(fcris,cbm,'b',fiasi,ibm,'g',fcris,dbm,'r');grid on;xlim([640 1100]);
+figure(1);clf;plot(fcris,cbm - dbm, 'm');grid on;axis([640 1100 -0.5 0.5])
 %}

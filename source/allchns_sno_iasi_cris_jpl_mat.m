@@ -140,10 +140,13 @@ if(igrp == 3 )
 end
  
 % convert Obs to BT
-ibt   = real(rad2bt(fiasi(xi(ichns))',s.irad(:,idn)) );
-junk  = real( rad2bt(fcris(ichns),s.crad(:,idn)) );
-cbt   = single(hamm_app(double(junk))); 
-dbt   = real( rad2bt(fcris(ichns),s.drad(:,idn)) ); 
+clear cbt ibt dbt cbm ibm dbm;
+  junk = single( hamm_app(double(s.irad(:,idn))) );
+ibt    = real(rad2bt(fiasi(xi(ichns))',junk) );
+  junk = single( hamm_app(double(s.crad(:,idn))) );
+cbt    = real( rad2bt(fcris(ichns),junk) );
+  junk = single( hamm_app(double(s.drad(:,idn))) );
+dbt   =  real( rad2bt(fcris(ichns), junk) );
 crad  = s.crad(:,idn);  
 cbm   = nanmean(cbt,2); 
 dbm   = nanmean(dbt,2); 
@@ -152,8 +155,8 @@ whos cbt dbt ibt crad s cbm dbm ibm
 
 %{ 
 % Sanity check
-figure(1);clf;plot(fcris(ichns),cbm,'b-',fcris(ichns),dbm,'g-',);grid on;
-figure(1);clf;plot(fcris(ichns),cbm - dbm, 'm.-');grid on;axis([bands(igrp,:) -1 1]);
+figure(1);clf;plot(fcris(ichns),cbm,'b-',fcris(ichns),dbm,'g-');grid on;axis([bands(igrp,:) 215 255]);
+figure(1);clf;plot(fcris(ichns),cbm - dbm, 'm.-');grid on;axis([bands(igrp,:) -0.6 0.6]);
 %}
 
 % create the scene bins for each channel
@@ -301,12 +304,12 @@ figure(3);clf;h1=subplot(2,1,1);plot(wmstats.wn,wmstats.cbm,'b-',wmstats.wn,wmst
   grid on;title('CrIS (b) IASI (g) 2012-14 SNO mean BT');ylabel('BT K');xlim(bands(igrp,:));
   h2=subplot(2,1,2);plot(wmstats.wn,wmstats.cbm - wmstats.dbm,'m.-');
   grid on;xlabel('wavenumber');ylabel('BT Bias K');axis([bands(igrp,:) -0.7 0.7]);
-  legend('IASI - CrIS','Location','North');
+  legend('CrIS - I2C','Location','North');
   %%ha=findobj(gcf,'type','axes');set(ha(1),'ylim',[-Inf Inf]);
-  linkaxes([h1 h2],'x');set(h1,'xticklabel','');pp=get(h1,'position');
-  set(h1,'position',[pp(1) pp(2)-pp(4)*0.1 pp(3) pp(4)*1.1])
-  pp=get(h2,'position'); set(h2,'position',[pp(1) pp(2) pp(3) pp(4)*1.1]);
-  aslprint(['./figs/IC_SNO_2012x_BTSpectrum_chns' sprintf('%d',igrp) '.png']);
+  linkaxes([h1 h2],'x');set(h1,'xticklabel','');pp1=get(h1,'position');
+  set(h1,'position',[pp1(1) pp1(2)-pp1(4)*0.1 pp1(3) pp1(4)*1.1])
+  pp2=get(h2,'position'); set(h2,'position',[pp2(1) pp2(2)+pp2(4)*0.1 pp2(3) pp2(4)*1.1]);
+  %aslprint(['./figs/IC_SNO_2012x_I2C_C_BTSpectrum_chns' sprintf('%d',igrp) '.png']);
 
 %{
 there is one structure: wmstats

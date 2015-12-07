@@ -82,6 +82,8 @@ load('/asl/data/airs/airs_freq.mat'); fa=freq; clear freq; % fa    [2378x1]
 xx=load('/asl/s1/chepplew/projects/sno/airs_iasi/JPL/airs2cris_CAF_20101101.mat'); fa2c=xx.a2cfrq; clear xx;
 [xa2c xc] = seq_match(fa2c, fcris);
 
+bands = [640, 1100; 1250, 1650; 2170, 2680];
+
 % Screen the channel selection for AIRS bad channels and update if necessary:
 aWavs = fa(xchns);
 for i=1:numel(aWavs)
@@ -253,51 +255,52 @@ figure(3);clf;
 
 % ********** SECTION II - Full spectrum all sample stats: ***********
 %            ============================================
-ratpm=0; ritpm=0; ra2cm=0; ri2cm=0;
-ratps=0; ritps=0; ra2cs=0; ri2cs=0;
+s.avhi2c = s.avri2c;  % single( hamm_app(double(s.avri2c)) );              % Don't 4get to hamming the IASI
+s.avha2c = s.avra2c;  % single( hamm_app(double(s.avra2c)) );
+r=struct;
+r.ratpm=0; r.ritpm=0; r.ra2cm=0; r.ri2cm=0;
+r.ratps=0; r.ritps=0; r.ra2cs=0; r.ri2cs=0;
 
 for i = 1:numel(s.nSam)
-  ratpm = ratpm + s.avra(:,i).*s.nSam(i);    ritpm = ritpm + s.avri(:,i).*s.nSam(i);
-  ra2cm = ra2cm + s.avra2c(:,i).*s.nSam(i);  ri2cm = ri2cm + s.avri2c(:,i).*s.nSam(i);
-  ratps = ratps + ( s.sdra(:,i).*s.sdra(:,i) + s.avra(:,i).*s.avra(:,i) )*s.nSam(i);
-  ritps = ritps + ( s.sdri(:,i).*s.sdri(:,i) + s.avri(:,i).*s.avri(:,i) )*s.nSam(i);
-  ra2cs = ra2cs + ( s.sdra2c(:,i).*s.sdra2c(:,i) + s.avra2c(:,i).*s.avra2c(:,i) )*s.nSam(i);
-  ri2cs = ri2cs + ( s.sdri2c(:,i).*s.sdri2c(:,i) + s.avri2c(:,i).*s.avri2c(:,i) )*s.nSam(i);
+  r.ratpm = r.ratpm + s.avra(:,i).*s.nSam(i);    r.ritpm = r.ritpm + s.avri(:,i).*s.nSam(i);
+  r.ra2cm = r.ra2cm + s.avha2c(:,i).*s.nSam(i);  r.ri2cm = r.ri2cm + s.avhi2c(:,i).*s.nSam(i);
+  r.ratps = r.ratps + ( s.sdra(:,i).*s.sdra(:,i) + s.avra(:,i).*s.avra(:,i) )*s.nSam(i);
+  r.ritps = r.ritps + ( s.sdri(:,i).*s.sdri(:,i) + s.avri(:,i).*s.avri(:,i) )*s.nSam(i);
+  r.ra2cs = r.ra2cs + ( s.sdra2c(:,i).*s.sdra2c(:,i) + s.avha2c(:,i).*s.avha2c(:,i) )*s.nSam(i);
+  r.ri2cs = r.ri2cs + ( s.sdri2c(:,i).*s.sdri2c(:,i) + s.avhi2c(:,i).*s.avhi2c(:,i) )*s.nSam(i);
 end
-gavra    = ratpm/sum(s.nSam);       gavri   = ritpm/sum(s.nSam);    
-gavra2c  = ra2cm/sum(s.nSam);       gavri2c = ri2cm/sum(s.nSam);
-gsdra    = real(sqrt( ratps/sum(s.nSam) - gavra.*gavra ));
-gsdri    = real(sqrt( ritps/sum(s.nSam) - gavri.*gavri ));
-gsdra2c  = real(sqrt( ra2cs/sum(s.nSam) - gavra2c.*gavra2c ));
-gsdri2c  = real(sqrt( ri2cs/sum(s.nSam) - gavri2c.*gavri2c ));
-gsera    = gsdra/sqrt(sum(s.nSam));      gseri   = gsdri/sqrt(sum(s.nSam));
-gsera2c  = gsdra2c/sqrt(sum(s.nSam));    gseri2c = gsdri2c/sqrt(sum(s.nSam));
+r.gavra    = r.ratpm/sum(s.nSam);            r.gavri   = r.ritpm/sum(s.nSam);    
+r.gavra2c  = r.ra2cm/sum(s.nSam);            r.gavri2c = r.ri2cm/sum(s.nSam);
+r.gsdra    = real(sqrt( r.ratps/sum(s.nSam) - r.gavra.*r.gavra ));
+r.gsdri    = real(sqrt( r.ritps/sum(s.nSam) - r.gavri.*r.gavri ));
+r.gsdra2c  = real(sqrt( r.ra2cs/sum(s.nSam) - r.gavra2c.*r.gavra2c ));
+r.gsdri2c  = real(sqrt( r.ri2cs/sum(s.nSam) - r.gavri2c.*r.gavri2c ));
+r.gsera    = r.gsdra/sqrt(sum(s.nSam));      r.gseri   = r.gsdri/sqrt(sum(s.nSam));
+r.gsera2c  = r.gsdra2c/sqrt(sum(s.nSam));    r.gseri2c = r.gsdri2c/sqrt(sum(s.nSam));
 
-gavba    = real(rad2bt(fa, gavra));       gavbi   = real(rad2bt(fiasi, gavri));
-gavba2c  = real(rad2bt(fa2c, gavra2c));   gavbi2c = real(rad2bt(fi2c, gavri2c));
-bias     = gavbd-gavba;
-gdrsd = 0.5*sqrt( (gsdra.*gsdra + gsdrd.*gsdrd) );
+r.gavba    = real(rad2bt(fa, r.gavra));      r.gavbi   = real(rad2bt(fiasi, r.gavri));
+r.gavba2c  = real(rad2bt(fa2c, r.gavra2c));  r.gavbi2c = real(rad2bt(fcris, r.gavri2c));
+r.bias     = r.gavba2c - r.gavbi2c;
+r.gdrsd    = 0.5*sqrt( (r.gsdra.*r.gsdra + r.gsdrd.*r.gsdrd) );
 btm = 0.5*(gavba + gavbd);
   mdr = 1E-3*(1./drdbt(fa,btm) );
 dbts  = mdr.*gdrsd;
 dbte  = dbts/sqrt(sum(s.nSam));
 
 %{
+save('AI_sno_A2C_I2C_plot_data.mat','s','r','fa','fcris','fiasi','fa2c','bands','xc');
 % Sanity Check & Plotting Options
  figure(1);clf;h1=subplot(2,1,1);
-   plot(fa,gavba,'b-',fiasi,gavbi,'r-',fa2c,gavba2c,'g-',fi2c,gavbi2c,'c-');axis([bands(2,:) 210 255])
+   plot(fa,r.gavba,'b-',fiasi,r.gavbi,'r-',fa2c,r.gavba2c,'g-',fcris,r.gavbi2c,'c-');axis([bands(1,:) 210 255])
    grid on;title('2011 AI SNO AIRS (b), IASI (r), A2C (g) I2C (c) Mean');
-   ylabel('BT (K)');legend('Airs 1b','Iasi','iasi2airs','location','north'); 
-  h2=subplot(2,1,2);plot(fa2c,bta2c - bti2c(xc),'.-');grid on;axis([bands(2,:) -0.8 0.8]);
-   xlabel('wn (cm-1)');ylabel('Bias K');
-   legend('Airs - Iasi2Airs','location','north');
+   ylabel('BT (K)'); %%%legend('Airs 1b','Iasi','iasi2airs','location','north'); 
+  h2=subplot(2,1,2);plot(fa2c,r.gavba2c - r.gavbi2c(xc),'.-');grid on;axis([bands(1,:) -0.8 0.8]);
+   xlabel('wn (cm-1)');ylabel('Bias K');legend('A2C - I2C','location','north');
    linkaxes([h1 h2],'x');set(h1,'xticklabel','');pp1=get(h1,'position');
    set(h1,'position',[pp1(1) pp1(2)-pp1(4)*0.1 pp1(3) pp1(4)*1.1])
-   pp2=get(h2,'position'); set(h2,'position',[pp2(1) pp2(2) pp2(3) pp2(4)*1.1]);
-   % aslprint('./figs/2011_AI_SNO_A2C_I2C_BTbias_MW.png')
-  AI.fa = fa; AI.fi = fi; AI.gavba = gavba; AI.gavbi = gavbi; AI.gavbd = gavbd; 
-  AI.dbte = dbte; 
-  % save('SNO_AI_201X_BTspect.mat','AI');
+   pp2=get(h2,'position'); set(h2,'position',[pp2(1) pp2(2)+pp2(4)*0.1 pp2(3) pp2(4)*1.1]);
+   % aslprint('./figs/AI_SNO_A2C_I2C_BTbias_LW.png')
+
 %}
 
 % --------------------------------
@@ -354,7 +357,6 @@ sp.mbias = sp.dbtm - sp.abtm;
 
 
 %{
-bands = [640, 1650; 2170, 2680]
 figure(2);clf;h1=subplot(2,1,1);
   plot(fa,n.abtm,'b-',fa,n.dbtm,'g-');grid on;axis([bands(1,:) 210 260]);
   title('AIRS (b) IASI (g) SNO LW');ylabel('BT K');
