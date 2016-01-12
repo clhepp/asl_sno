@@ -23,6 +23,11 @@ function s = read_sno_airs_cris_jpl_mat(sdate1, sdate2, cchns)
 % Notes: i) No QA is applied. ii) time separation of SNO pairs from file is positive-only
 %    so is recomputed here.
 %
+
+addpath /home/chepplew/gitLib/asl_sno/source
+addpath /home/chepplew/gitLib/asl_sno/data
+
+s = struct;
  
 % Process the date strings
 posYrs = [2002:2015];
@@ -53,10 +58,10 @@ load('/home/chepplew/projects/airs/master_nig_01_2009.mat');   % nig [1 x 1535]
 % nig = importdata('/home/strow/Work/Airs/good_chan_list');
 junk = ismember([1:2378], nig);  nib = find(junk == 0);  clear junk;
 
-load('/asl/data/airs/airs_freq.mat'); fa=freq; clear freq;
-load('~strow/Matlab/Cris/Data/freq_cris');             % 1305 chns (no guard chans)
-load('~chepplew/cris_f1317.mat');  fc = cfchan;        % 1317 chns (12 guard chans)
-fd = fcris([1:1037 1158:1305]);                        % prior knowledge from Howards decon routine
+xx=load('/asl/data/airs/airs_freq.mat'); fa=xx.freq; clear xx;
+xx=load('cris_freq_nogrd.mat'); f_cris=xx.vchan; clear xx;  % 1305 chns (no guard chans)
+xx=load('cris_freq_2grd.mat');  fc = xx.vchan; clear xx;    % 1317 chns (12 guard chans)
+fd = f_cris([1:1037 1158:1305]);                            % prior knowledge from Howards decon routine
 
 % Screen the channel selection for AIRS bad channels and update if necessary:
 cWavs = fc(cchns);
@@ -70,15 +75,18 @@ for i=1:numel(cWavs)
   dchn(i) = find(fd  > cWavs(i)-0.25, 1);
 end
 for i=1:numel(cWavs) sWavs{i}  = sprintf('%6.2f',cWavs(i)); end
+s.Wavs  = cWavs; 
+s.sWavs = sWavs;
 
 % ************* load up SNO data ********************
-dp     = '/asl/s1/chepplew/projects/sno/airs_cris/v10_0_0/standard/'; % standard/';
+dp     = '/asl/s1/chepplew/projects/sno/airs_cris/JPL/v10_0_0/'; % or /JPL/standard/';
 snoLst = dir(strcat(dp,'sno_airs_cris_*.mat'));
 fprintf(1,'Found %d SNO files\n',numel(snoLst));
 
 % subset range by date as requested:
 dstart = datenum([nyr1 nmn1 ndy1]);
 dlast  = datenum([nyr2 nmn2 ndy2]);
+ifn1   = 1;
 for i=1:numel(snoLst)
   junk = snoLst(i).name(15:22);
   thisdat = datenum( [str2num(junk(1:4)) str2num(junk(5:6)) str2num(junk(7:8))] );
@@ -110,7 +118,7 @@ for ifnum = ifn1:ifn2
       s.td    = [s.td,g.tdiff'];                       %
       s.dsn   = [s.dsn,g.dist'];
       s.csolz = [s.csolz,g.csolzen'];
-      s.alnfr = [s.alnfr, g.alandfrac'];   s.clnfr = [s.clnfr,g.clandfrac']; 
+      %%%s.alnfr = [s.alnfr, g.alandfrac'];   s.clnfr = [s.clnfr,g.clandfrac']; 
       s.nSam  = [s.nSam,single(size(g.ra,2))];
 
       s.avra  = [s.avra,nanmean(g.ra,2)];       s.sdra = [s.sdra,nanstd(g.ra,1,2)];  
@@ -132,16 +140,22 @@ s.td2 = s.atim - s.ctim;              % tdiff from JPL are exclusively real posi
 
 %{
 % plot options
-junk = ones(1,size(td2,2)); junk = td2*86400; junk = dsn;
-figure(1);clf;simplemap(arlat, arlon, junk); title('AIRS CRIS SNO map 2013 w/delay (s)');
-  % aslprint('AirsCrisLrC_SNO_2013_locMap_wDelay.png');
-figure(2);clf;semilogy(fa,avra(:,1),'b',fc,avrc(:,1),'m',fd,avrd(:,1),'c');grid;
-figure(3);clf;hist(lat,180),xlim([-90 90]);
+addpath /asl/matlab2012/aslutil                         % simplemap
+addpath /asl/matlib/plotutils                           % aslprint
+abt   = real(rad2bt(s.Wavs,s.arad));   abtm  = real(rad2bt(fa,s.avra));
+cbt   = real(rad2bt(s.Wavs,s.crad));   cbtm  = real(rad2bt(fc,s.avrc));
+arr1  = ones(1,size(s.td2,2)); %junk1 = s.td2*86400; junk2 = s.dsn;
+
+figure(1);clf;simplemap(s.arlat, s.arlon, s.td2/60); title('2013 AIRS CRIS stnd SNO dist (km)');
+  % aslprint('./figs/2013_AirsCris_jplStnd_mapDelay.png');
+figure(2);clf;semilogy(fa,s.avra(:,1),'b',fc,s.avrc(:,1),'m',fd,s.avrd(:,1),'c');grid on;
+figure(2);clf;plot(fa,abtm(:,19),fc,cbtm(:,19));grid on;axis([-Inf Inf -Inf Inf]);
+figure(3);clf;hist(s.arlat,180),xlim([-90 90]);
    xlabel('latitude bin');ylabel('population');title('AIRS CRIS stnd SNO All data Distribution');
    % aslprint('AirsCris_AllSno_lat_hist.png')
-figure(3);clf;hist(abt(4,:),100); xlabel('B.T. (K)');ylabel('population');
-   title('AIRS All Sample SNO 1414 wn population'); % set(gca, 'YScale', 'log')
-   % aslprint('AirsCris_AllSno_1414wn_hist.png')
+figure(3);clf;hist(abt(1,:),120); xlim([180 330]);grid on;
+  xlabel('B.T. (K)');ylabel('population');title('2013 Stnd AIRS 900 wn population');
+   % aslprint('./figs/2013_AC_stnd_Airs_900wn_hist.png')
 
 %}
 

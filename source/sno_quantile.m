@@ -4,6 +4,7 @@
 %
 % Synopsis: sd: structure of arrays retuend from the reader.
 %           ans: for IASI or CRIS paired with AIRS
+%                possible values are: 'CRIS'; 'IASI';
 %
 %
 %
@@ -19,8 +20,9 @@ addpath /home/strow/Git/breno_matlab/Math         % Math_bin.m
 addpath /asl/matlab2012/aslutil/                  % drdbt.m
 
 % Check and process input string 'ans' for pairing with AIRS
-IASI = 1;  CRIS = 0;
-CRIS = 1;  IASI = 0;
+if(~strcmp(ans, 'CRIS') && ~strcmp(ans, 'IASI')) fprintf(1, 'ERROR: wrong ans\n'); end
+if(strcmp(ans, 'IASI')) IASI = 1;  CRIS = 0; end
+if(strcmp(ans, 'CRIS')) CRIS = 1;  IASI = 0; end
 
 % Get quantile profiler and set to prf.
 %load('/home/strow/Matlab/Sno/prob_vector.mat');  p = p(1:200:end);
@@ -53,6 +55,16 @@ if(IASI)
     sd.arad(k,inQ) = NaN;  sd.irad(k,inQ) = NaN;  sd.drad(k,inQ) = NaN;
   end
 end
+% Basic QA for sd.crad and sd.drad
+if(CRIS)
+  indZ = find(sd.drad(1,:) <= 0.001); incZ = find(sd.crad(1,:) <= 0.001);
+    fprintf(1,'%d, %d\n', numel(indZ), numel(incZ));
+  for k = 1:numel(sd.Wavs)
+    sd.drad(k,indZ) = NaN; sd.crad(k,indZ) = NaN;
+    sd.drad(k,incZ) = NaN; sd.crad(k,incZ) = NaN;
+  end
+end 
+
 
 if(CRIS)
   % subset if needed 
@@ -86,7 +98,8 @@ clear binsz btbias radstd dbm btstd btser bias250;
 %clear btbias radstd dbm btstd btser binsz bias250;
 
 for jj = 1:numel(sd.Wavs)
-  sbins = btbins; sbins = qsBins(jj,:);
+  if(exist('btbins')) sbins = btbins; end
+  if(exist('qsBins')) sbins = qsBins(jj,:); end
   clear dbin dbinStd dbinN dbinInd xbin xbinStd xbinN xbinInd ubinInd;
   [dbin dbinStd dbinN dbinInd] = Math_bin(dbt(jj,:),dbt(jj,:),sbins); 
   [xbin xbinStd xbinN xbinInd] = Math_bin(xbt(jj,:),xbt(jj,:),sbins);
@@ -107,6 +120,13 @@ for jj = 1:numel(sd.Wavs)
   end
   fprintf(1,'.');
 end
+
+%{
+k = 1;
+figure(2);clf;subplot(2,1,1);plot(qsBins(k,1:end-1),btbias(k,:),'.-');grid on;
+ axis([200 320 -0.7 0.7]);
+ subplot(2,1,2);semilogy(qsBins(k,1:end-1),binsz(k,:),'.-');grid on;
+%}
 
 % parameter fitting section
 % -------------------------

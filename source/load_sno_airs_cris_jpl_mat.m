@@ -7,7 +7,7 @@ function [s a] = load_sno_airs_cris_jpl_mat(sdate1, sdate2, cchns)
 %
 % Synopsis: load_sno_airs_cris_jpl_mat('date1','date2',[chan1...chan10]);
 %           date1: first month as string: 'YYYY/MM/DD'
-%           date2: last month as string: 'YYYY/MM/DD'
+%           date2: last month as string:  'YYYY/MM/DD'
 %           [chan1, ...]: numeric list of CrIS channels to load (max 10).
 %           eg [403 499 737 884 905 998 1021 1297]
 %
@@ -31,6 +31,7 @@ function [s a] = load_sno_airs_cris_jpl_mat(sdate1, sdate2, cchns)
  
 cd /home/chepplew/gitLib/asl_sno/run
 addpath /home/chepplew/gitLib/asl_sno/source
+addpath /home/chepplew/gitLib/asl_sno/data            % frequency grids
 
 % Process the date strings
 posYrs = [2002:2015];
@@ -82,7 +83,7 @@ s.Wavs  = cWavs;
 s.sWavs = sWavs;
 
 % ************* load up SNO data ********************
-dp     = '/asl/s1/chepplew/projects/sno/airs_cris/v10_0_0/standard/'; % standard/';
+dp = '/asl/s1/chepplew/projects/sno/airs_cris/JPL/v10_0_0/'; % /standard/';
 %%%snoLst = dir(strcat(dp,'sno_airs_cris_*.mat'));
 unix(['cd ' dp '; find . -noleaf -type f -name ''sno_airs_cris_2013*.mat'' -printf ''%P\n'' > /tmp/fn.txt;']);
 fh = fopen('/tmp/fn.txt');
@@ -96,13 +97,14 @@ end
 fclose(fh);
 cc  = cellstr(cc);
 ccs = sort(cc);
-%fullfile(dp,ccs{i})  Note that i = 1:length(ccs)
+  %fullfile(dp,ccs{i})  Note that i = 1:length(ccs)
   %snoLst = dir(strcat(dp,'sno_airs_cris_*.mat'));
 fprintf(1,'Found %d total SNO files\n',numel(ccs));
 
 % subset range by date as requested:
 dstart = datenum([nyr1 nmn1 ndy1]);
 dlast  = datenum([nyr2 nmn2 ndy2]);
+ifn1   = 1;
 for i=1:numel(ccs)
   junk = ccs{i}(15:22);
   %%%junk = snoLst(i).name(15:22);
@@ -142,7 +144,7 @@ for ifnum = ifn1:ifn2
       s.td    = [s.td,g.tdiff'];                        % use [x,xd'] for JPL SNO
       s.dsn   = [s.dsn,g.dist'];
       s.csolz = [s.csolz,g.csolzen'];
-      s.alnfr = [s.alnfr, g.alandfrac'];  s.clnfr = [s.clnfr,g.clandfrac']; 
+      %%s.alnfr = [s.alnfr, g.alandfrac'];  s.clnfr = [s.clnfr,g.clandfrac']; 
 
       a.nSam  = [a.nSam,single(size(g.ra,2))];
       a.avra  = [a.avra,nanmean(g.ra,2)];       a.sdra = [a.sdra,nanstd(g.ra,1,2)];  
