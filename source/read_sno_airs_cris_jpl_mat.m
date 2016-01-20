@@ -24,6 +24,7 @@ function s = read_sno_airs_cris_jpl_mat(sdate1, sdate2, cchns)
 %    so is recomputed here.
 %
 
+cd /home/chepplew/gitLib/asl_sno/run
 addpath /home/chepplew/gitLib/asl_sno/source
 addpath /home/chepplew/gitLib/asl_sno/data
 
@@ -79,7 +80,8 @@ s.Wavs  = cWavs;
 s.sWavs = sWavs;
 
 % ************* load up SNO data ********************
-dp     = '/asl/s1/chepplew/projects/sno/airs_cris/JPL/v10_0_0/'; % or /JPL/standard/';
+%%dp     = '/asl/s1/chepplew/projects/sno/airs_cris/JPL/v10_0_0/'; % or 
+dp     = '/asl/s1/chepplew/projects/sno/airs_cris/JPL/standard/';
 snoLst = dir(strcat(dp,'sno_airs_cris_*.mat'));
 fprintf(1,'Found %d SNO files\n',numel(snoLst));
 

@@ -1,4 +1,4 @@
- function sno_quantile(sd,ans)
+ function wmstats = sno_quantile(sd,ans)
 
 % function sno_quantila(sd,ans);
 %
@@ -133,7 +133,11 @@ figure(2);clf;subplot(2,1,1);plot(qsBins(k,1:end-1),btbias(k,:),'.-');grid on;
 wmstats = struct;
 for jj = 1:numel(sd.Wavs)
   clear junk;
-  wmstats.wn(jj) = sd.Wavs(jj);
+  wmstats.wn(jj)    = sd.Wavs(jj);
+  wmstats.bias{jj}  = btbias(jj,:);
+  wmstats.btser{jj} = btser(jj,:);
+  wmstats.binbt{jj} = qsBins(jj,1:end-1);
+
 
   % range select by bin size and hot scenes
   inband = find(binsz(jj,:) > 1000);
@@ -190,6 +194,8 @@ for jj = 1:numel(sd.Wavs)
 
 end   % end jj
 
+
+%{
 % Plotting section
 % ----------------
 jj = 1;
@@ -217,6 +223,7 @@ figure(2);clf;plot(bincen(blo(jj,1):bhi(jj,1)),btbias(jj,blo(jj,1):bhi(jj,1)));g
     fprintf(1,'saving graphic %d\n', jj)
     %saveas(gcf,[figNam '.fig'],'fig'); saveas(gcf, [figNam '.png'],'png');
   
-end      % end of jj for loop  
+%end      % end of jj for loop  
+%}
 
 end

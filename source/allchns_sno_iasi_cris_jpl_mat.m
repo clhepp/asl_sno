@@ -3,7 +3,7 @@ function wmstats = allchns_sno_iasi_cris_jpl_mat(sdate, igrp)
 % Load and prep stats for all channels from a SMALL SNO set
 
 % INPUT: sdate calendar date to start collection
-%        e.g. sdate='2011/01/02';
+%        e.g. sdate='2012/04/01';
 %        igrp - the group number for the channels in multiples of 200.
 %           selected to cover the common grid channels (1185)
 %           valid range 1:6.
@@ -90,6 +90,7 @@ end
 fprintf(1,'Processing SNO files from %s to %s\n',ccs{ifn1}, ccs{ifn2});
 
 clear g;
+s = struct;
 s.td    = [];   s.crad  = [;]; s.irad = [;]; s.drad = [;]; s.itim = [];  s.ctim = []; 
 s.clat  = [];   s.clon  = [];  s.dsn  = [];  s.ilat = [];  s.ilon = []; s.csolz = [];
 s.iqual = [];   s.isolz = [];
@@ -110,6 +111,10 @@ for ifnum = ifn1:ifn2
         s.csolz = [s.csolz, g.csolzen'];
 	s.isolz = [s.isolz, g.isolzen'];
         s.iqual = [s.iqual, g.iqual'];
+	s.td    = [s.td,    g.tdiff'];
+	s.dsn   = [s.dsn,   g.dist'];
+	s.clat  = [s.clat,  g.clat'];      s.clon = [s.clon,  g.clon'];
+	s.ilat  = [s.ilat,  g.ilat'];      s.ilon = [s.ilon,  g.ilon'];
       else
         fprintf(1,'unequal skip: %d\n',ifnum);
       end
@@ -165,7 +170,7 @@ qcBins.B = quantile(cbt,prf,2);
 qdBins.B = quantile(dbt,prf,2);
 qc       = cell2mat(struct2cell(qcBins));
 qd       = cell2mat(struct2cell(qdBins));
-qsBins   = (qc + qd)/2.0;                        % x:AIRS & d:IASI-to-AIRS
+qsBins   = (qc + qd)/2.0;                        % c:CrIS & d:IASI-to-CrIS
 
 % populate the scene bins for each channel (jj)
 clear binsz btbias radstd cdbm btstd btser bias250;
@@ -195,7 +200,7 @@ fprintf(1,'\n');
 
 %{
 % Sanity check
-jj=200;
+jj=400;
 figure(2);clf;plot(qsBins(jj,1:end-1),btbias(jj,:),'b.-');grid on;
 %}
 
@@ -210,7 +215,8 @@ for jj = 1:numel(ichns)
   clear junk;
   wmstats.bias{jj}  = btbias(jj,:);
   wmstats.btser{jj} = btser(jj,:);
-  wmstats.bins{jj}  = qsBins(jj,1:end-1);
+  wmstats.binqa{jj}  = qsBins(jj,1:end-1);
+  wmstats.binsz{jj}  = binsz(jj,:);
 
   % range select by bin size and hot scenes
   inband = find(binsz(jj,:) > 500);
@@ -330,13 +336,14 @@ wmstats =
        pl: [400x3 single]
 
 
-wn    = wavenumber of the channel (on the common grid). 
-cbm   = mean CrIS BT spectrum (for the 400 channels in group)
-dbm   = mean IASI-to-CrIS BT spectrum (ditto)
-bias  = the BT bias I-C for the 400 scene bins.
-btser = the standard error for the bias for the 400 scene bins.
-bins  = the scene bins used for the bias calcs.
-b     = 3 x weighted average values per channel:(full range; 
+wn     = wavenumber of the channel (on the common grid). 
+cbm    = mean CrIS BT spectrum (for the 400 channels in group)
+dbm    = mean IASI-to-CrIS BT spectrum (ditto)
+bias   = the BT bias I-C for the 400 scene bins.
+btser  = the standard error for the bias for the 400 scene bins.
+binqa  = the scene bins used for the bias calcs from the quantile profiler (in K).
+binsz  = the population in each bin of the quantile profiler for each channel.
+b      = 3 x weighted average values per channel:(full range; 
       restricted range by sample size, restricted range by std.err)
 mx: 3 x maximum BT bias (K) for repsective channel and range.
 mn: 3 x minimum BT bias (ditto)

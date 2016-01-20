@@ -4,7 +4,7 @@ cd /home/chepplew/gitLib/asl_sno/run
 addpath /home/chepplew/gitLib/asl_sno/source
 addpath /asl/matlib/plotutils                                               % aslprint.m
 addpath /asl/packages/ccast/source                                          % seq_match.m
-
+addpath /asl/matlab2012/aslutil                                             % wmean
 
 xx = load('/home/chepplew/projects/cris/cris_freq_2grd.mat');  fcris = xx.vchan; clear xx;    % 1317 chns (12 guard chans)
 xx = load('/asl/data/airs/airs_freq.mat'); fairs=xx.freq; clear xx;                           % 2378
@@ -31,28 +31,59 @@ dp = '/home/chepplew/gitLib/asl_sno/run/';
 sfn = {'sno_IC_wmstats_2012x_chns400x01.mat','sno_IC_wmstats_2012x_chns400x02.mat',...
        'sno_IC_wmstats_2012x_chns400x03.mat'};
 
-xcbm = []; xdbm = []; xwn = []; xbias = [];
+xcbm = []; xdbm = []; xwn = []; xbias = []; xser = []; xbinsz = []; xbinqa = [];
 
-for i = 1:3
+for i = 1:numel(sfn)
   g = load(strcat(dp,sfn{i}));
   
   [xm xn]  = size(g.wmstats.wn);
-  xcbm  = [xcbm;  g.wmstats.cbm];
-  xdbm  = [xdbm;  g.wmstats.dbm];
-  xwn   = [xwn;   g.wmstats.wn'];
-   junk = g.wmstats.bias;
+  xcbm   = [xcbm;  g.wmstats.cbm];
+  xdbm   = [xdbm;  g.wmstats.dbm];
+  xwn    = [xwn;   g.wmstats.wn'];
+   junk  = g.wmstats.bias;
    junk(cellfun(@ischar,junk)) = {NaN};
-   out  = cell2mat(junk);
-   out  = reshape(out, 200, xn);  
-  xbias = [xbias, out];
-  clear g junk;
+   out   = cell2mat(junk);
+   out   = reshape(out, 200, xn);          % <- 200 is the quantile profiler dimension
+  xbias  = [xbias, out];
+  clear junk out;
+   junk  = g.wmstats.btser;
+   junk(cellfun(@ischar,junk)) = {NaN};
+   out   = cell2mat(junk);
+   out   = reshape(out, 200, xn);          % <- 200 is the quantile profiler dimension
+  xser   = [xser, out];   
+  xbinsz = [xbinsz, g.wmstats.binsz];
+  xbinqa = [xbinqa, g.wmstats.binqa];
 end
-whos xbias xcbm xdbm xwn;
+whos xbias xcbm xdbm xwn xser xbinsz xbinqa;
+
+[nm nn] = size(xbias);
+clear aa ww xstd jtot;
+xbinqa = reshape(cell2mat(xbinqa), 200, nn);
+xbinsz = reshape(cell2mat(xbinsz), 200, nn);
+jtot   = sum(xbinsz,1);
+for i = 1:nn
+  aa = squeeze(xser(:,i));   ww = squeeze(xbinsz(:,i));
+  xstd(i) = wmean(aa, ww);
+end
+
        
 %{
-% sanity check
-figure(10);clf;plot(xwn, xdbm, 'b-');grid on;axis([bands(1,:) 210 255]);
-figure(10);clf;plot(xwn, xcbm - xdbm,'.-');grid on;title('CrIS - IASI');axis([bands(1,:) -0.45 0.45]);
+% plotting options
+figure(10);clf;plot(xwn, xdbm, 'b-');grid on;axis([bands(1,:) 200 255]);
+figure(10);clf;plot(xwn, xcbm - xdbm,'.-',xwn, xstd,'.-');axis([bands(1,:) -0.45 0.45]);
+  grid on;
+  xlabel('Wavenumber cm^{-1}');ylabel('Bias (K)');title('2012-14 IASI CrIS SNO LW Bias'); 
+  legend('Bias','Standard Error','location','South');
+  % aslprint('./figs/IC_jplSNO_Bias_stErr_LW_spectrum.png');
+figure(11);clf;h1=subplot(2,1,1);plot(xbinqa(:,403),xbias(:,403));hold on;grid on;
+  plot(xbinqa(:,403),xser(:,403),xbinqa(:,403),-xser(:,403)); 
+   axis([200 300 -1 1]);ylabel('Bias K');title('IASI CrIS Bias at 900 wn vs Scene');
+   h2=subplot(2,1,2);semilogy(xbinqa(:,403),xbinsz(:,403));grid on;axis([200 300 100 10000]);
+   xlabel('Scene BT (K)');ylabel('population');
+  linkaxes([h1 h2],'x');set(h1,'xticklabel','');
+  pp1=get(h1,'position');set(h1,'position',[pp1(1) pp1(2)-pp1(4)*0.1 pp1(3) pp1(4)*1.1])
+  pp2=get(h2,'position');set(h2,'position',[pp2(1) pp2(2)+pp2(4)*0.1 pp2(3) pp2(4)*1.1])  
+  % aslprint('./figs/IC_jplSNO_Bias_stErr_900wn_vsScene.png');
 
 %}
 
