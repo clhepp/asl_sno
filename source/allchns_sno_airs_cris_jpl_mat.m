@@ -14,7 +14,8 @@ function wmstats = allchns_sno_airs_cris_jpl_mat(sdate, igrp)
 %         of SNO data.
 %         Replaced dir() with unix(find...) which generates temporary file.
 %
-% NOTES: allow 10 GB on compute node.
+% NOTES: allow 20 GB on compute node.
+%        default end date is dlast = 2013/12/31;
 %
 % C Hepplewhite. November 2015.
 
@@ -40,6 +41,9 @@ ichns = [(igrp-1)*400 + 1:igrp*400];                        % applies to the AIR
 if(igrp == 3) ichns = [801:1185]; end
 fprintf(1,'Doing channels %d to %d\n', ichns(1),ichns(end));
 
+% for plotting at the end:
+bands = [640, 900; 900, 1320; 1300 2560];                % fcris(ichns(1):ichns(end));
+
 % load the frequency grids:
 xx=load('/asl/data/airs/airs_freq.mat'); fa=xx.freq; clear xx;
 xx=load('cris_freq_nogrd.mat'); f_cris=xx.vchan; clear xx;  % 1305 chns (no guard chans)
@@ -58,7 +62,8 @@ prf  = yp;
 
 
 clear x cc ccs;
-dp = '/asl/s1/chepplew/projects/sno/airs_cris/v10_0_0/standard/'; % standard/';
+%%dp = '/asl/s1/chepplew/projects/sno/airs_cris/JPL/v10_0_0/';
+dp = '/asl/s1/chepplew/projects/sno/airs_cris/JPL/standard/';
 unix(['cd ' dp '; find . -noleaf -maxdepth 1 -type f -name ''sno_airs_cris_2013*.mat'' -printf ''%P\n'' > /tmp/fn.txt;']);
 fh = fopen('/tmp/fn.txt');
 x  = fgetl(fh);
@@ -76,21 +81,24 @@ ccs = sort(cc);
 fprintf(1,'Found %d total SNO files\n',numel(ccs));
 
 dstart = datenum([nyr nmn ndy]);
+dlast  = datenum([2013 12 31]);
+ifn1   = 1;
 for i=1:numel(ccs)
   %junk = snoLst(i).name(15:22);
   junk = ccs{i}(15:22);
   thisdat = datenum( [str2num(junk(1:4)) str2num(junk(5:6)) str2num(junk(7:8))] );
   if(thisdat <= dstart) ifn1 = i; end
-  %%if(thisdat <= dlast)  ifn2 = i; end
+  if(thisdat <= dlast)  ifn2 = i; end
 end
-ifn2 = ifn1 + 60;                        % only 10 SNO days
+%%ifn2 = ifn1 + 60;                        % only 10 SNO days
 %fprintf(1,'Processing SNO files from: %s to %s\n',snoLst(ifn1).name, snoLst(ifn2).name);
 fprintf(1,'Processing SNO files from %s to %s\n',ccs{ifn1}, ccs{ifn2});
 
 clear g;
 s = struct;
 s.td    = [];   s.arad = [;]; s.crad = [;]; s.drad = [;]; s.ctim = [];  s.atim = []; 
-s.arlat = [];  s.arlon = [];  s.dsn  = []; s.crlat = []; s.crlon = []; s.csolz = [];  
+s.alat  = [];   s.alon = [];  s.dsn  = [];  s.clat = [];  s.clon = []; s.csolz = [];  
+s.asolz = [];
 %s.alnfr = [];  s.clnfr = []; s.cifv  = [];
 %a.nSam  = [];   a.avrd = [;]; a.avra = [;]; a.avrc = [;]; a.sdra = [;]; a.sdrc = [;]; 
 %a.sdrd  = [;];
@@ -105,6 +113,12 @@ for ifnum = ifn1:ifn2
       %%s.arad  = [s.arad, g.ra(achns,:)];                 % [arad, [ra(achn,:); avaw]]; etc
       s.crad  = [s.crad, g.rc(xc(ichns),:)];                % 1317 chns (12 guard chans)
       s.drad  = [s.drad, g.raDecon(xd(ichns),:)];           %
+      s.csolz = [s.csolz, g.csolzen'];
+      s.asolz = [s.asolz, g.asolzen'];
+      s.td    = [s.td,    g.tdiff'];
+      s.dsn   = [s.dsn,   g.dist'];
+      s.clat  = [s.clat,  g.clat'];      s.clon = [s.clon,  g.clon'];
+      s.alat  = [s.alat,  g.alat'];      s.alon = [s.alon,  g.alon'];
 
     %end
   end
@@ -113,20 +127,44 @@ end
 fprintf(1,'\n');
 [nx ny] = size(s.crad);
 fprintf(1,'number of SNO pairs: %d\n', ny);
+
+% Quality Control
+
+% Subset e.g. day/night
+idn = ':';                                                    % include all scenes for LW and MW bands
+if(igrp == 3 )
+  idn = find(s.csolz > 90 & s.asolz > 90);
+  fprintf(1,'Found %d night\n',numel(idn));
+end
+
   
-% convert Obs to BT
-clear junk abt cbt dbt cbm dbm;
-%%abt  = real(rad2bt(fa(achns),s.arad));
-junk  = real( rad2bt(fc(xc(ichns)),s.crad) );
-cbt   = single(hamm_app(double(junk))); 
+% convert Obs to BT - running out of memory so chop hamming and rad2bt into 2 chunks.
+clear junk abt cbt dbt cbm dbm; cbt = []; dbt = [];
+zm = [ 1 200 201 400];   if(igrp == 3) zm = [1 200 201 385]; end
+zn = [1+(igrp-1)*400,  -200+igrp*400 -199+igrp*400 ichns(end)];
+for k = 1:2:3
+    junk = single( hamm_app(double(s.crad(zm(k):zm(k+1),idn))) );
+  cbt    = [cbt; real( rad2bt(fc(xc(zn(k):zn(k+1))), junk) )];  clear junk;
+    junk = single( hamm_app(double(s.drad(zm(k):zm(k+1), idn))) );
+  dbt    = [dbt; real( rad2bt(fd(xd(zn(k):zn(k+1))), junk) )];  clear junk;
+end
+
+%junk  = real( rad2bt(fc(xc(ichns)),s.crad) );
+%cbt   = single(hamm_app(double(junk))); 
 %%%cbt  = real(rad2bt(fc(xc(ichns)),s.crad)); 
-junk  = real(rad2bt(fd(xd(ichns)),s.drad)); 
-dbt   = single(hamm_app(double(junk)));
+%junk  = real(rad2bt(fd(xd(ichns)),s.drad)); 
+%dbt   = single(hamm_app(double(junk)));
+
 crad  = s.crad;  
 cbm   = nanmean(cbt,2); 
 dbm   = nanmean(dbt,2);         
 whos cbt dbt crad cbm dbm
-s
+
+%{ 
+% Sanity check
+figure(1);clf;plot(fc(ichns),cbm,'-',fc(ichns),dbm,'g-');grid on;axis([bands(igrp,:) 215 295]);
+figure(1);clf;plot(fc(ichns),cbm - dbm, 'm.-');grid on;axis([bands(igrp,:) -0.6 0.6]);
+%}
 
 % create the scene bins for each channel
 clear qsBins qxBins qdBins qx qd;
@@ -171,13 +209,13 @@ wmstats       = struct; blo =[]; bhi = [];
 wmstats.cbm   = cbm;
 wmstats.dbm   = dbm;
 wmstats.wn    = fd(xd(ichns));
-wmstats.binsz = binsz;
 
 for jj = 1:numel(ichns)
   clear junk;
   wmstats.bias{jj}  = btbias(jj,:);
   wmstats.btser{jj} = btser(jj,:);
-  wmstats.binbt{jj} = qsBins(jj,1:end-1);
+  wmstats.binqa{jj} = qsBins(jj,1:end-1);
+  wmstats.binsz{jj} = single(binsz(jj,:));
 
   % range select by bin size and hot scenes
   inband    = find(binsz(jj,:) > 500);
@@ -254,7 +292,7 @@ end
 % ----------------
 addpath /asl/matlib/plotutils              % aslprint.m
 jj = 90;
-bincen = wmstats.binbt{jj}; %qsBins(jj,1:end-1);
+bincen = wmstats.binqa{jj}; %qsBins(jj,1:end-1);
 figure(1);clf;
   subplot(2,1,1);plot(bincen,wmstats.bias{jj},'k.-',bincen,wmstats.btser{jj},'r-');grid on;
     axis([200 300 -2 2]);

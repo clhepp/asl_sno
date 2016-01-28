@@ -27,6 +27,8 @@ addpath /home/chepplew/myLib/matlib/aslutil       % rad2bt.m
 addpath /home/strow/Git/breno_matlab/Math         % Math_bin.m
 addpath /asl/matlab2012/aslutil/                  % drdbt.m
 addpath /asl/packages/ccast/source                % seq_match.m
+addpath /asl/packages/airs_decon/source           % hamm_app
+addpath /asl/matlib/plotutils                     % aslprint.m
 
 % set up the dates to process:
 if (length(sdate) ~= 10) fprintf(1,'Error in date\n'); exit; end
@@ -43,10 +45,10 @@ xx=load('cris_freq_2grd.mat');  fcris = xx.vchan'; clear xx;       % 1317 chns (
 if (igrp < 1 || igrp > 3) fprintf(1,'igrp out of range (1 to 3)\n'); exit; end
 cchns = [(igrp-1)*400 + 1:igrp*400];                        % applies to the IASI->AIRS
 if(igrp == 3) ichns = [801:1317]; end
-fprintf(1,'Doing CrIS channels %d to %d\n',cchns(1),cchns(end));
+fprintf(1,'Doing channels %d to %d\n',cchns(1),cchns(end));
 % subset between the I2C [1317] and A2C grids [1185]
 [xa2c xc] = seq_match(fa2c, fcris);
-
+achns = cchns;
 
 % Get quantile profiler and set to prf.
 %load('/home/strow/Matlab/Sno/prob_vector.mat');  p = p(1:200:end);
@@ -77,20 +79,22 @@ ccs = sort(cc);
 fprintf(1,'Found %d total SNO files\n',numel(ccs));
 
 dstart = datenum([nyr nmn ndy]);
+dlast  = datenum([2014 03 01]);
+ifn = 1;
 for i=1:numel(ccs)
   junk = ccs{i}(15:22);
   thisdat = datenum( [str2num(junk(1:4)) str2num(junk(5:6)) str2num(junk(7:8))] );
   if(thisdat <= dstart) ifn1 = i; end
-  %%if(thisdat <= dlast)  ifn2 = i; end
+  if(thisdat <= dlast)  ifn2 = i; end
 end
-ifn2 = ifn1 + 36;                        % only 36 SNO files from 2001/01/01.
+%%ifn2 = ifn1 + 36;                        % pre-select 36 SNO files from 2001/01/01.
 %fprintf(1,'Processing SNO files from: %s to %s\n',snoLst(ifn1).name, snoLst(ifn2).name);
 fprintf(1,'Processing SNO files from %s to %s\n',ccs{ifn1}, ccs{ifn2});
 
-clear g;
-s.td    = [];   s.arad = [];  s.irad = [];  s.ra2c = [];  s.i2rc = []; s.i2ra = [];
-s.itim = [];  s.atim = []; 
-s.arlat = [];  s.arlon = [];  s.dsn  = []; s.ialat = []; s.ialon = []; s.csolz = [];
+clear g; s = struct;
+s.td    = [];   s.arad = [];  s.i2ra = [];  s.ra2c = [];  s.i2rc = [];
+s.itim  = [];   s.atim = []; 
+s.alat  = [];   s.alon = [];  s.dsn  = [];  s.ilat = [];  s.ilon = []; s.csolz = [];
 s.iqual = [];  
 %s.alnfr = [];  s.clnfr = []; s.cifv  = [];
 %a.nSam  = [];   a.avrd = [;]; a.avra = [;]; a.avrc = [;]; a.sdra = [;]; a.sdrc = [;]; 
@@ -98,60 +102,71 @@ s.iqual = [];
 
 for ifnum = ifn1:ifn2
   vars = whos('-file',strcat(dp,ccs{ifnum}));
-  if( ismember('i2ra', {vars.name}) )              % AIRS->CrIS is present
     %if(snoLst(ifnum).bytes > 1.0E4)
       if( vars(4).size(1) == vars(15).size(1) )         % ensure same no. obs
       g = load(strcat(dp,ccs{ifnum}));
-      %%s.arad  = [s.arad, g.ra(achns,:)];                % 
-      %%s.irad  = [s.drad, g.i2ra(ichns,:)];              %
-      s.ra2c  = [s.ra2c, g.ra2c(cchns,:)];              % 
-      %%s.i2ra  = [s.i2ra, g.i2ra(achns,:)];              %
-      s.i2rc  = [s.i2rc, g.i2rc(cchns,:)];
+      if(ismember('i2ra',{vars.name}))                  % get airs & iasi->airs
+        s.arad  = [s.arad, g.ra(achns,:)];
+        s.i2ra  = [s.i2ra, g.i2ra(achns,:)]; 
+      end
+%      if(ismember('i2rc',{vars.name}))                  % get iasi->cris and airs->cris
+%        s.ra2c  = [s.ra2c, g.ra2c(cchns,:)];
+%        s.i2rc  = [s.i2rc, g.i2rc(xc(cchns),:)]; 
+%      end
       %%s.iqual = [s.iqual, g.iqual'];
       end
     %end
-  end
   fprintf(1,'.');
 end
 clear g;
 fprintf(1,'\n');
-[nx ny] = size(s.ra2c);
-fprintf(1,'number of SNO pairs: %d\n', ny);
+[nx ny] = size(s.ra2c); [mx my] = size(s.i2ra);
+fprintf(1,'number of A2C SNO pairs: %d\t of AI SNO pairs: %d\n', ny, my);
 
 % quality control
 inq = find(s.iqual ~= 0);
 s.drad(inq) = NaN;  s.arad(inq) = NaN;                 % need to match pairs.
 fprintf(1,'Found %d bad i2ra radiances\n',numel(inq));
+
+% subsetting (TBD)
+idn = ':';
  
 % convert Obs to BT
-clear abt ibt a2cbt i2cbt abm ibm a2cbm i2cbm
-%%abt  = real(rad2bt(fa(achns),s.arad));
-abt  = real(rad2bt(fa(ichns),s.arad)); 
-dbt  = real(rad2bt(fa(ichns),s.drad)); 
-arad = s.arad;  
-abm  = nanmean(abt,2); 
-dbm  = nanmean(dbt,2);         
-whos abt dbt arad s abm dbm
+clear abt a2cbt i2abt i2cbt abm ibm a2cbm i2cbm
+abt    = real(rad2bt(fa(achns),s.arad)); 
+i2abt  = real(rad2bt(fa(achns),s.i2ra));
+  junk = single( hamm_app(double(s.i2rc(:,idn))) );
+i2cbt  = real(rad2bt(fcris(cchns),junk));
+a2cbt  = real(rad2bt(fcris(cchns),s.ra2c)); 
+arad   = s.arad;  
+abm    = nanmean(abt,2);
+i2abm  = nanmean(i2abt,2);
+a2cbm  = nanmean(a2cbt,2);
+i2cbm  = nanmean(i2cbt,2);
+whos abt i2abt i2cbt a2cbt arad abm i2abm a2cbm i2cbm
 
 %{ 
 % Sanity check
-figure(1);clf;plot(fa(ichns),abm,'b-',fa(ichns),dbm,'g-');grid on;
+figure(1);clf;plot(fa(achns),abm,'b-',fa(achns),i2abm,'g-');grid on;
+figure(1);clf;plot(fa(achns),abm - i2abm,'m.-');grid on;
+figure(1);clf;plot(fcris(cchns),a2cbm,fcris(cchns),i2cbm);grid on;
+figure(1);clf;plot(fcris(cchns), a2cbm - i2cbm);grid on;
 %}
 
-% create the scene bins for each channel
+% create the scene bins for each channel (AIRS / I2A)
 clear qaBins qxBins qdBins qx qa qd qsBins;
 qxBins.B = quantile(abt,prf,2);
-qdBins.B = quantile(dbt,prf,2);
+qdBins.B = quantile(i2abt,prf,2);
 qx       = cell2mat(struct2cell(qxBins));
 qd       = cell2mat(struct2cell(qdBins));
 qsBins   = (qx + qd)/2.0;                        % x:AIRS & d:IASI-to-AIRS
 
 % populate the scene bins for each channel (jj)
-clear binsz btbias radstd cdbm btstd btser bias250;
-for jj = 1:numel(ichns)
+clear binsz btbias radstd adbm cdbm btstd btser bias250;
+for jj = 1:numel(cchns)
   sbins = qsBins(jj,:);
   clear dbin dbinStd dbinN dbinInd abin abinStd abinN abinInd ubinInd;
-  [dbin dbinStd dbinN dbinInd] = Math_bin(dbt(jj,:),dbt(jj,:),sbins); 
+  [dbin dbinStd dbinN dbinInd] = Math_bin(i2abt(jj,:),i2abt(jj,:),sbins); 
   [abin abinStd abinN abinInd] = Math_bin(abt(jj,:),abt(jj,:),sbins);
 
   for i = 1:length(dbin)                                                       
@@ -160,9 +175,9 @@ for jj = 1:numel(ichns)
 
   for i = 1:length(dbin)
     binsz(jj,i)   = length(ubinInd{i});
-    btbias(jj,i)  = nanmean( dbt(jj,ubinInd{i}) - abt(jj,ubinInd{i}) );
-    radstd(jj,i)  = nanstd( s.drad(jj,ubinInd{i}) - arad(jj,ubinInd{i}) );
-    adbm(i)    = 0.5*( nanmean(dbt(jj,ubinInd{i})) + nanmean(abt(jj,ubinInd{i})) );
+    btbias(jj,i)  = nanmean( i2abt(jj,ubinInd{i}) - abt(jj,ubinInd{i}) );
+    radstd(jj,i)  = nanstd( s.arad(jj,ubinInd{i}) - s.i2ra(jj,ubinInd{i}) );
+    adbm(i)    = 0.5*( nanmean(i2abt(jj,ubinInd{i})) + nanmean(abt(jj,ubinInd{i})) );
       mdr      = 1E-3*( 1./drdbt(fa(jj),adbm(i)) );
     btstd(jj,i)   = mdr.*radstd(jj,i);  
     btser(jj,i)   = btstd(jj,i)./sqrt(binsz(jj,i));
@@ -173,23 +188,32 @@ end
 fprintf(1,'\n');
 
 %{
-% Sanity check
-jj=200;
-figure(2);clf;plot(qsBins(jj,1:end-1),btbias(jj,:),'b.-');grid on;
+% Sample plotting
+jj=400;  xaxis = qsBins(jj,1:end-1);
+figure(2);clf;h1=subplot(2,1,1);
+  plot(xaxis,btbias(jj,:),'.-',xaxis,btser(jj,:),xaxis,-btser(jj,:));grid on;axis([190 290 -1 1]);
+  ylabel('Bias (K)');title('AIRS IASI SNO bias 900 wn vs Scene');
+  h2=subplot(2,1,2);semilogy(xaxis,binsz(jj,:));grid on;axis([190 290 100 20000]);
+  xlabel('Scene Temperature (K)');ylabel('population');
+  linkaxes([h1 h2],'x');set(h1,'xticklabel','');
+  pp1=get(h1,'position');set(h1,'position',[pp1(1) pp1(2)-pp1(4)*0.1 pp1(3) pp1(4)*1.1])
+  pp2=get(h2,'position');set(h2,'position',[pp2(1) pp2(2)+pp2(4)*0.1 pp2(3) pp2(4)*1.1])  
+  %aslprint('./figs/AI_jplSNO_bias_std_900wn_vScene.png');
 %}
 
 % parameter fitting section
 % -------------------------
 wmstats = struct; blo =[]; bhi = [];
 wmstats.abm = abm;
-wmstats.dbm = dbm;
-wmstats.wn  = fa(ichns);
+wmstats.i2abm = i2abm;
+wmstats.wn  = fa(achns);
 
-for jj = 1:numel(ichns)
+for jj = 1:numel(cchns)
   clear junk;
   wmstats.bias{jj}  = btbias(jj,:);
   wmstats.btser{jj} = btser(jj,:);
-  wmstats.bins{jj}  = qsBins(jj,1:end-1);
+  wmstats.binqa{jj} = qsBins(jj,1:end-1);
+  wmstats.binsz{jj} = single(binsz(jj,:));
 
   % range select by bin size and hot scenes
   inband = find(binsz(jj,:) > 500);
