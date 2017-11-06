@@ -22,27 +22,27 @@ load('/asl/data/iremis/danz/iasi_f.mat');                      % fiasi [8461x1]
 xx=load('cris_freq_2grd.mat');  fcris = xx.vchan; clear xx;    % 1317 chns (12 guard chans)
 
 if(CRIS)
-  dp    = '/asl/s1/chepplew/projects/sno/iasi_cris/JPL/';
+  dp    = '/asl/s1/chepplew/data/sno/iasi_cris/LR/2017/';
   fpatt = '''sno_iasi_cris*.mat''';               % 3x' required to include ' in the variable
 end
 if(AIRS)
-  dp    = '/asl/s1/chepplew/projects/sno/airs_iasi/JPL/';
+  dp    = '/asl/s1/chepplew/data/sno/airs_iasi/JPL/';
   fpatt = '''sno_airs_iasi_2011*.mat''';               % 3''' required to include ' in the variable
 end
 
-clear x cc ccs;
+clear x ccx ccs;
 unix(['cd ' dp '; find . -noleaf -maxdepth 1 -type f -name ' fpatt ' -printf ''%P\n'' > /tmp/fn.txt;']);
 fh = fopen('/tmp/fn.txt');
 x  = fgetl(fh);
 i  = 1;
 while ischar(x)
-   cc{i} = x;
+   ccx{i} = x;
    i = i + 1;
    x = fgetl(fh);
 end
 fclose(fh);
-cc  = unique(cellstr(cc));
-ccs = sort(cc);
+ccx  = unique(cellstr(ccx));
+ccs = sort(ccx);
 %fullfile(dp,ccs{i})  Note that i = 1:length(ccs)
 fprintf(1,'Found %d total SNO files\n',numel(ccs));
 
@@ -52,27 +52,28 @@ opt1.nguard  = 2;                                  % 2 guard channels per band e
 
 for ifn = 1:numel(ccs)
   g = load(strcat(dp,ccs{ifn}));
-  if(numel(g.ilat) > 100)
-    %%if(~isfield(g, 'i2rc'))
+  if(numel(g.ilat) > 2)
+    if(~isfield(g, 'i2rc'))
       fprintf(1,'processing: %s\n',ccs{ifn}); 
-      [xrad xfrq] = iasi2cris(g.ri,fiasi,opt1);
+      [ns nz] = size(g.ri);
+      if(ns ~= 8461 & nz == 8461) xri = g.ri'; else xri = g.ri; end
+      [xrad xfrq] = iasi2cris(xri,fiasi,opt1);
 
       i2rc  = single(xrad);  fi2c = single(xfrq);
       matfn = matfile( strcat(dp,ccs{ifn}),'Writable',true );
       matfn.i2rc = i2rc;
       matfn.fi2c = fi2c;
       matfn = matfile( strcat(dp,ccs{ifn}),'Writable',false );
-    %%else
-    %%  fprintf(1,'skip %d\n',ifn)
-    %%end 
+    else
+      fprintf(1,'skip %d\n',ifn)
+    end 
   else
-    fprintf(1,'skip %d\n',ifn)
+    fprintf(1,'too few pairs: %d\n',ifn)
   end
 %  fprintf(1,'.');
-  clear matfn xrad xfrq i2rc fi2c g;
+  clear matfn xrad xfrq i2rc fi2c g xri;
 end
 
-%clear g;
 
 %{ 
 % Sanity check - pick one file and re-load g.

@@ -1,7 +1,7 @@
 % plot_sno_airs_cris_jpl_mat.m
 %
 % Working with data supplied by: allchns_sno_airs_cris_jpl_mat.m
-%  [ sa qn ] = allchns_sno_airs_cris_jpl_mat('2013/01/01', 1);
+%  first run: [ sa qn ] = allchns_sno_airs_cris_jpl_mat('2013/01/01', 1);
 
 addpath /asl/matlib/plotutils              % aslprint.m
 
@@ -23,15 +23,22 @@ if(igrp == 1) sa.ichns = [1:nLW];          cband = 'LW'; nchns = nLW;  end
 if(igrp == 2) sa.ichns = [nLW+1: nLW+nMW]; cband = 'MW'; nchns = nMW;  end
 if(igrp == 3) sa.ichns = [nLW+nMW+1:1185]; cband = 'SW'; nchns = nSW;  end
 
+% simplify the frequency range
+fa = sa.fa(sa.achns);
+fc = sa.fc(xc(sa.ichns));
+fd = sa.fd(xd(sa.ichns));
+
 % Convert rad to BT, do global stats (also used in next section)  
 % remove bad data first:
 idx = sa.ing;
-cbt = single(rad2bt(sa.fc(xc(sa.ichns)), sa.crad(:,idx)));
-dbt = single(rad2bt(sa.fd(xd(sa.ichns)), sa.drad(:,idx)));
-% qnstats.cbm 
-% qnstats.dbm
-% qnstats.stderr
+abt = single(rad2bt(fa, sa.arad(:,idx)));
+cbt = single(rad2bt(fc, sa.crad(:,idx)));
+dbt = single(rad2bt(fd, sa.drad(:,idx)));
+abm = nanmean(abt,2);
+cbm = nanmean(cbt,2);
+dbm = nanmean(dbt,2);
 
+figure(1);clf;plot(fa,abm,'-',fc,cbm,'-',fd,dbm,'-');
 figure(1);clf;plot(qn.wn, qn.cbm,'b-',qn.wn,qn.dbm,'g-');grid on;
 figure(1);clf;[hax,hl1,hl2]=plotyy(qn.wn,qn.cbm - qn.dbm, ... 
   qn.wn,qn.stderr);grid on;
@@ -141,14 +148,23 @@ figure(2); hold on;
   end   
  % aslprint([phome 'AC_jplSNO_Bias_stdErr_wModEdges_LW.png']);
 
+% -------- HISTOGRAMS -------
+btbins   = [180:1:320];    btcens = [180.5:1:319.5];
+% subset to small range of channels
+cchns = [399:408];  achns = [755:769];
+clear pdf_abt pdf_cbt pdf_dbt;
+for i=1:length(achns) pdf_abt(i,:) = histcounts(abt(achns(i),:), btbins); end
+for i=1:length(cchns) pdf_cbt(i,:) = histcounts(cbt(cchns(i),:), btbins); end
+for i=1:length(cchns) pdf_dbt(i,:) = histcounts(dbt(cchns(i),:), btbins); end
+
 % -------------- HISTOGRAMS: for 900 wn channel:  ----------------- %
-  ich = 403; ich = [360:480];
-  btbins   = [180:1:320];
-  c403_pdf = histcounts(cbt(ich,:),btbins);    d403_pdf = histcounts(dbt(ich,:),btbins);
-  btbinx   = (btbins(1:end-1)+btbins(2:end))/2;
-  figure(4);clf;plot(btbinx,c403_pdf,'+-', btbinx,d403_pdf,'o-');grid on;
-    xlabel('Scene BT (K)');ylabel('population');    legend('CrIS','AIRS');
-    %title('AIRS CrIS SNO 900wn channel population');
+  ach = 759; cch = 402; 
+  pdf_a759 = histcounts(abt(ach,:),btbins);    
+  pdf_c402 = histcounts(cbt(cch,:),btbins);
+  pdf_d402 = histcounts(dbt(cch,:),btbins);
+  figure(4);clf;plot(btcens,pdf_a759,'-', btcens,pdf_c402,'-',btcens,pdf_d402,'-');grid on;
+    xlabel('Scene BT (K)');ylabel('population');    legend('AIRS','CrIS','A2C');
+    title('AIRS CrIS SNO 900wn channel population');
   % aslprint([phome 'AC_jplSNO_900wn_population_vs_scene.png'])
 % day/night
   c404d_pdf = histcounts(day.cbt(ich,:),btbins); d404d_pdf = histcounts(day.dbt(ich,:),btbins);

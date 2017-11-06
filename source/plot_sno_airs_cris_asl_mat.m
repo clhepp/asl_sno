@@ -1,56 +1,33 @@
 % plot_sno_airs_cris_asl_mat.m
 
-% first run:  [s] = load_sno_airs_cris_asl_mat_v2(sdate1, sdate2, xchns, src);
+% first run:  [s] = load_sno_airs_cris_asl_mat(sdate1, sdate2, xchns, src);
 
 % plot options
 
-phome = '/home/chepplew/projects/sno/airs_cris/LR/';
-
-%btm   = 0.5*(dbtm + cbtm(incd));
-%mdr   = 1E-3*(1./drdbt(fd,btm') );
-%drse  = sqrt((a.gddrs.^2 + a.gcdrs(incd).^2))/sqrt(sum(a.nSam));
-%dbse  = mdr.*drse';
-
-% --- remove 6-sigma outliers -----
-addpath /home/chepplew/myLib/matlib/math          % remove_6sigma
-disp(['Removing outliers']);
-crbias = s.rc - s.rd;
-clear g;
-for i=1:length(s.cchns)
-   n  = remove_6sigma(crbias(i,:));
-   nn = remove_6sigma(crbias(i,n));
-   g(i).n = n(nn);
-end
-
-% Now find unique set of bad SNO samples
-x = [];
-[~, psz] = size(crbias);
-for i=1:length(s.cchns)
-   x = [x setdiff(1:psz,g(i).n)];
-end
-x  = unique(x);
-ig = setdiff(1:psz,x);
-disp(['Removed ' num2str(length(x)) ' outliers']);
+phome = '/home/chepplew/projects/sno/airs_cris/LR/figs/';
 
 % --------------- convert to BT ----------------------------
-abt      = real(rad2bt(s.fa(s.achns), s.ra(:,ig)));
-cbt      = real(rad2bt(s.fc(s.cchns), s.rc(:,ig)));
-dbt      = real(rad2bt(s.fd(s.dchns), s.rd(:,ig)));
-nbr_cbt  = real(rad2bt(s.fc(s.cchns), s.nbr_rLW(:,:,ig)));     clear junk;
+abt      = real(rad2bt(s.fa, s.ra(:,s.ig)));
+cbt      = real(rad2bt(s.fc, s.rc(:,s.ig)));
+dbt      = real(rad2bt(s.fa2c, s.ra2c(:,s.ig)));
+nbr_cbt  = real(rad2bt(s.fc, s.nbr_rLW(:,:,ig)));     clear junk;
 nbr_abt  = real(rad2bt(s.fa(s.achns), s.nbr_ra(:,:,ig)));
 nbr_dbt  = real(rad2bt(s.fd(s.dchns), s.nbr_rd(:,:,ig)));
+% ---------------- Basic Stats ------------------------------
 btbias   = dbt - cbt;
  whos abt cbt dbt nbr_abt nbr_cbt nbr_dbt btbias
 abm      = nanmean(abt,2);
 cbm      = nanmean(cbt,2);
 dbm      = nanmean(dbt,2);
+bias_mn  = nanmean(cbt - dbt,2);
+bias_sd  = nanstd(cbt - dbt, 0,2);
 nbr_cbm  = nanmean(nbr_cbt,3);
 nbr_abm  = nanmean(nbr_abt,3);
 nbr_dbm  = nanmean(nbr_dbt,3);
 nbr_cbsd = nanstd(nbr_cbt,0,3);                     % global std.dev
 nbr_absd = nanstd(nbr_abt,0,3);
 nbr_dbsd = nanstd(nbr_dbt,0,3);
- whos abm cbm dbm nbr_abm nbr_cbm nbr_dbm nbr_cbsd nbr_absd nbr_dbsd
+ whos abm cbm dbm bias_mn bias_sd nbr_abm nbr_cbm nbr_dbm nbr_cbsd nbr_absd nbr_dbsd
 
 % --------------- neighbour stats at SNOs ----------------------------
 
@@ -76,12 +53,12 @@ sim_cbt  = real(rad2bt(s.fc(s.cchn), sim_rc'));
 sim_abt  = real(rad2bt(s.fa(s.achn), sim_ra'));
 %
 
-% --------- generate weighted vals using SNOs & neighbours ---------------
+% --------- generate simulated Obs using SNOs & neighbours ---------------
 clear sim_rc sim_ra;
 for j=1:length(s.cchns)
-  for i=1:size(s.rc,2) sim_rc(j,i) = 0.8*s.rc(j,i) + 0.1*sum(s.nbr_rLW(j,1:2,i)); end
+  for i=1:size(s.rc,2) sim_ra(j,i) = 0.8*s.rc(j,i) + 0.1*sum(s.nbr_rLW(j,1:2,i)); end
 end
-sim_cbt  = real(rad2bt(s.fc(s.cchns), sim_rc(:,ig)));
+sim_abt  = real(rad2bt(s.fc(s.cchns), sim_ra(:,ig)));
 %sim_abt  = real(rad2bt(s.fa(s.achn(4)), sim_ra'));
   whos sim_rc sim_ra sim_cbt sim_abt;
 
@@ -113,19 +90,22 @@ junk = [-5:.05:5]; y0 = normpdf(junk,0,1); yp = cumsum(y0)./20.0; clear junk y0;
 % Choose which profiler to use (goes in prf)
 s.prf  = yp;
 
-% create the scene bins for each channel
+% create the scene bins for each channel and choose AIRS or simulated AIRS
+xbt = dbt;      xra = s.rd;
+xbt = sim_abt;  xra = sim_ra;
+
 clear qcBins qdBins qsBins qc qd;
 qcBins.B = quantile(cbt,s.prf,2);
-qdBins.B = quantile(dbt,s.prf,2);
+qdBins.B = quantile(xbt,s.prf,2);
 qc       = cell2mat(struct2cell(qcBins));
 qd       = cell2mat(struct2cell(qdBins));
-qsBins   = (qc + qd)/2.0;                        % x:AIRS & d:IASI-to-AIRS
+qsBins   = (qc + qd)/2.0;
 
 clear binsz btbias radstd btstd btser
 for jj = 1:numel(s.cchns)
   sbins = qsBins(jj,:);
-  [dbin dbinStd dbinN dbinInd] = Math_bin(dbt(jj,:),sim_cbt(jj,:)-dbt(jj,:),sbins); 
-  [cbin cbinStd cbinN cbinInd] = Math_bin(cbt(jj,:),sim_cbt(jj,:)-dbt(jj,:),sbins);
+  [dbin dbinStd dbinN dbinInd] = Math_bin(xbt(jj,:),cbt(jj,:)-xbt(jj,:),sbins); 
+  [cbin cbinStd cbinN cbinInd] = Math_bin(cbt(jj,:),cbt(jj,:)-xbt(jj,:),sbins);
 
   % diagnostics: record the separate number samples in each bin:
   num_cbin(jj,:) = cbinN;
@@ -137,9 +117,9 @@ for jj = 1:numel(s.cchns)
 
   for i = 1:length(dbin)
     binsz(jj,i)   = length(ubinInd{i});
-    btbias(jj,i)  = nanmean( dbt(jj,ubinInd{i}) - sim_cbt(jj,ubinInd{i}) );
-    radstd(jj,i)  = nanstd( s.rd(jj,ig(ubinInd{i})) - sim_rc(jj,ig(ubinInd{i})) );   % s.rc
-    cdbm(i)    = 0.5*( nanmean(dbt(jj,ubinInd{i})) + nanmean(cbt(jj,ubinInd{i})) );
+    btbias(jj,i)  = nanmean( xbt(jj,ubinInd{i}) - cbt(jj,ubinInd{i}) );
+    radstd(jj,i)  = nanstd( xra(jj,ig(ubinInd{i})) - s.rc(jj,ig(ubinInd{i})) );   % s.rc
+    cdbm(i)    = 0.5*( nanmean(xbt(jj,ubinInd{i})) + nanmean(cbt(jj,ubinInd{i})) );
       mdr      = 1E-3*( 1./drdbt(s.fd(s.dchns(jj)),cdbm(i)) );
     btstd(jj,i)   = mdr.*radstd(jj,i);  
     btser(jj,i)   = btstd(jj,i)./sqrt(binsz(jj,i));
@@ -147,7 +127,7 @@ for jj = 1:numel(s.cchns)
   end
   jtot  = sum(binsz(jj,:));
   jmdr  = 1E-3*( 1./drdbt(s.fd(s.dchns(jj)),cbm(jj)) );
-  jbtse = jmdr.* nanstd(s.rd(jj,ig) - sim_rc(jj,ig),1,2) / sqrt(jtot);   % s.rc
+  jbtse = jmdr.* nanstd(xra(jj,ig) - s.rc(jj,ig),1,2) / sqrt(jtot);   % s.rc
   fprintf(1,'.');
 end
 fprintf(1,'\n');
@@ -194,7 +174,7 @@ figure(6);clf;semilogy(btcens, pdf_nbr_cbt_bin304(ich,:),'.-');xlim([275 315]);g
 %                     PLOTTING SECTION 
 % ----------------------------------------------------------------
 %
-figure(1);clf;plot(s.fa(s.achns),abm,'.-',s.fc(s.cchns),cbm,'.-',s.fd(s.dchns),dbm,'.-');
+figure(1);clf;plot(s.fa,abm,'-',s.fc,cbm,'-',s.fa2c,dbm,'-');
   grid on;legend('AIRS','CrIS','A2C','Location','southEast');
 % ------------ Maps ----------------------
 figure(1);clf;simplemap(s.cLat, s.cLon, s.tdiff*24*60);title('Delay AIRS-CrIS mins');
@@ -205,15 +185,18 @@ figure(1);clf;simplemap(s.cLat(ig), s.cLon(ig), (dbt(ich,:) - cbt(ich,:))');
   title('Bias AIRS - CrIS (K)');
 
 % ------------ Histograms -----------------
-ich = 12;
+ach = find(s.fa>900,1); cch = find(s.fc>900,1); dch = find(s.fd>900,1);
 pc_diff_pdf = 100.*(pdf_cbt - pdf_abt)./pdf_cbt;
-figure(2);clf;plot(btcens,pdf_cbt(ich,:),'.-', btcens,pdf_dbt(ich,:),'.-'); grid on;
+figure(2);clf;plot(btcens,pdf_cbt(cch,:),'.-', btcens,pdf_dbt(dch,:),'.-',...
+      btcens,pdf_abt(ach,:),'-'); grid on;xlim([190 330]);
+   xlabel('Scene BT bin (K)');ylabel('Number in bin');title('2013 ASL A:C SNO 900 cm^{-1} channel')
+   legend('CrIS','AIRS2CrIS','AIRS')
 figure(2);clf;
- h1=subplot(2,1,1);plot(btcens,pdf_cbt(ich,:),'.-', btcens,pdf_dbt(ich,:),'.-'); grid on;
+ h1=subplot(2,1,1);plot(btcens,pdf_cbt(cch,:),'.-', btcens,pdf_dbt(dch,:),'.-'); grid on;
  title('Obs count by 900cm-1 temp. bin');axis([200 330 0 Inf]);
- h2=subplot(2,1,2);plot(btcens,pdf_cbt(ich,:),'.-', btcens,pdf_dbt(ich,:),'.-'); grid on;
-   xlim([300 320]);legend('CrIS','AIRS');xlabel('Tb (K)');
- h2=subplot(2,1,2);plot(btcens, pc_diff_pdf(4,:),'.-');grid on;ylabel('% diff CrIS-AIRS');
+ h2=subplot(2,1,2);plot(btcens,pdf_cbt(cch,:),'.-', btcens,pdf_dbt(dch,:),'.-'); grid on;
+   xlim([200 320]);legend('CrIS','AIRS');xlabel('Tb (K)');
+ h2=subplot(2,1,2);plot(btcens, pc_diff_pdf(ich,:),'.-');grid on;ylabel('% diff CrIS-AIRS');
 
 figure(2);clf;plot(btcens,pdf_sim_cbt(ich,:),'.-', btcens,pdf_dbt(ich,:),'.-'); grid on;
 
@@ -238,7 +221,8 @@ figure(2);clf;plot(btcens, (pdf_sim_cbt(4,:) - pdf_cbt(4,:))./pdf_cbt(4,:),'.-')
    xlim([200 330]); grid on; legend('CrIS','AIRS');
    title('Fraction difference AIRS and CrIS neighbors vs SNO'); 
 
-
+% ------------ Basic Stats -------------------------
+figure(2);cla;plot(s.fa2c,bias_mn,'-');
 
 % choose hot subset (or no subset here)
  idx = ':';  % idx = uHot305;
@@ -261,8 +245,10 @@ clear pdf_*
 % -------------------------- quantiles --------------------------- %
 ich = 12;   % or 16
 figure(4);clf;h1=subplot(2,1,1);plot(qsBins(ich,1:end-1), btbias(ich,:), '.-');grid on;
-  axis([190 330 -0.8 0.4]);
+  axis([190 330 -1 0.3]);title('2013 ASL AC SNO 902 wn Bias'); ylabel('AIRS - CrIS K')
   h2=subplot(2,1,2);semilogy(qsBins(ich,1:end-1), cbinN,'-');grid on;xlim([190 330]);
+  xlabel('Scene BT at 902 wn (K)')
+
   % saveas(gcf, [phome  '2013_aslSNO_900wn_bias_vs_scene.png'], 'png');
   
 % ----------------- Hot Scene Investigation -----------------------
@@ -278,4 +264,9 @@ figure(1);clf;simplemap(s.cLat(uHot305), s.cLon(uHot305), dbt(uHot305)');
   pp1=get(h1,'position');set(h1,'position',[pp1(1) pp1(2)-pp1(4)*0.1 pp1(3) pp1(4)*1.1])
   pp2=get(h2,'position');set(h2,'position',[pp2(1) pp2(2)+pp2(4)*0.1 pp2(3) pp2(4)*1.1])  
 
+
+%btm   = 0.5*(dbtm + cbtm);
+%mdr   = 1E-3*(1./drdbt(fd,btm') );
+%drse  = sqrt((a.gddrs.^2 + a.gcdrs.^2))/sqrt(sum(a.nSam));
+%dbse  = mdr.*drse';
 
