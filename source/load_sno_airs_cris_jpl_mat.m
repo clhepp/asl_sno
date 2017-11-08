@@ -1,91 +1,256 @@
-function [s a] = load_sno_airs_cris_jpl_mat(sdate1, sdate2, cchns)
+function [s] = load_sno_airs_cris_jpl_mat(sdate1, sdate2, xchns)
+
+% Load and prep stats for all channels from a 'SMALL' SNO set (see notes below)
 %
-% function load_sno_airs_cris_jpl_mat() loads up radiances for a selected number
-%   of channels, specified by CrIs channel number, from the JPL SNO mat files 
-%   and for the specified year and months. Unlike the sister function 'read_sno...'
-%   this function cacluates statistics during load and subsets of CrIS FOV.
+% INPUT: sdate1 calendar date to start collection
+%        e.g. sdate1='2013/01/01';
+%        xchns: the channels corresponding to CrIS lo-res bands w/ no guard channels.
+%               valid range 1:1305. or: LW: [1:713], MW: [714:1146], SW: [1157:1305]
+%     
+% OUTPUTS:
+%        s: structure with fields of data ** BEFORE SUBSETTING **
+%        s.clat,  s.clon        CrIS Latitude and Longitude
+%        s.alat,  s.alon        AIRS Latitude and Longitude
+%        s.ctim,  s.atim        CrIS and AIRS time
+%        s.czols, s.azols       CrIS and AIRS solar zenith angle
+%        s.cifov                CrIS IFOV [1..9]
+%        s.td                   Time delay between Obs (secs)
+%        s.dist                 Separation between Obs (km)
+%        s.crad,  s.drad        Cris and AIRS raw radiance spectra.
+%        s.fa, s.fc, s.fd       AIRS [2378] CrIS [1317] Common [1185] channels
+%        s.ichns                The channels loaded in this session.
+%        s.prf                  The quantil profiler to use.
+%        s.fnames               The SNO filenames loaded.
+%        s.inh, s.ish           Indexes of samples in the northern(southern) hemisphere.
+%        s.idn, s.idd           Indexes of samples obtained during the day(night).
 %
-% Synopsis: load_sno_airs_cris_jpl_mat('date1','date2',[chan1...chan10]);
-%           date1: first month as string: 'YYYY/MM/DD'
-%           date2: last month as string:  'YYYY/MM/DD'
-%           [chan1, ...]: numeric list of CrIS channels to load (max 10).
-%           eg [403 499 737 884 905 998 1021 1297]
 %
-% Output:  Two structures of arrays. 
-%             s: the SNO single fields.
-%             a: whole spectrum averages and first moment.
+% VERSION: 1: Gulps subset of channels of SNO data for selected period.
+%          Replaced dir() with unix(find...) which generates temporary file.
 %
-% Notes: If the CrIS channel is associated with a bad AIRS channel or has been
-%        modified by AIRS L1C (clean and fill) then the next neares good channel
-%        is substituted.
+% NOTES: allow >20 GB on compute node.
+%        default end date is dlast = 2013/12/31;
 %
-% Dependencies: i) AIRS good channel list; ii) nominal AIRS and CrIS frequency grids.
-%    iii) fixed path and file name syntax for SNO files.
-%
-% Notes: i) No QA is applied. ii) time separation of SNO pairs from file is positive-only
-%    so is recomputed here.
-%
-% C Hepplewhite
-%
-% VERSION: 24 Nov 2015: changed dir() to unix(find...) to get SNO files
- 
+% C Hepplewhite. November 2015.
+% CLH. Mar 2017. Update path to SNO data
+%                changed grouping spectral channels to match CrIS LW, MW and SW.
+
+clearvars s a wmstats g -except sdate igrp;
+
 cd /home/chepplew/gitLib/asl_sno/run
 addpath /home/chepplew/gitLib/asl_sno/source
-addpath /home/chepplew/gitLib/asl_sno/data            % frequency grids
+addpath /home/chepplew/gitLib/asl_sno/data        % cris_freq_*.mat
+addpath /home/chepplew/myLib/matlib/aslutil       % rad2bt.m
+addpath /asl/packages/airs_decon/source           % hamm_app.m seq_match.m
+addpath /home/chepplew/myLib/matlib/math          % remove_6sigma
+addpath /home/chepplew/projects/cris              % cris_freq*.mat
 
-% Process the date strings
-posYrs = [2002:2015];
+s = struct;
+
+% ---------------------------------
+% Check the requested channel list:
+if(length(xchns) > 1305 | min(xchns) < 1 | max(xchns) > 1305)
+ error('Invalid channel selection, valid range 1:1305'); end
+ 
+% --------------------------------
+% Check & Process the date strings
+posYrs = [2002:2017];
 posMns = [1:12];
-% check dates are entered correctly:
-if (length(sdate1) ~= 10 || length(sdate2) ~= 10) fprintf(1,'Error in dates\n'); exit; end
-syr1 = sdate1(1:4);  smn1 = sdate1(6:7);  sdy1 = sdate1(9:10);
-syr2 = sdate2(1:4);  smn2 = sdate2(6:7);  sdy2 = sdate2(9:10);
-junk = ismember(posYrs, str2num(syr1)); if(isempty(~find(junk))) fprintf('invalid year\n'); end
-junk = ismember(posMns, str2num(smn1)); if(isempty(~find(junk))) fprintf('invalid month\n'); end
-junk = ismember([1:31], str2num(sdy1)); if(isempty(~find(junk))) fprintf('invalid day\n'); end
-junk = ismember(posYrs, str2num(syr2)); if(isempty(~find(junk))) fprintf('invalid year\n'); end
-junk = ismember(posMns, str2num(smn2)); if(isempty(~find(junk))) fprintf('invalid month\n'); end
-junk = ismember([1:31], str2num(sdy2)); if(isempty(~find(junk))) fprintf('invalid day\n'); end
-nyr1 = str2num(syr1); nmn1 = str2num(smn1);  ndy1 = str2num(sdy1);
-nyr2 = str2num(syr2); nmn2 = str2num(smn2);  ndy2 = str2num(sdy2);
-junk = sprintf('%4d/%02d/%02d',nyr1-1,12,31);
-jdy1 = datenum(sdate1)-datenum(junk);  clear junk;           % needed for data directory
-junk = sprintf('%4d/%02d/%02d',nyr2-1,12,31);
-jdy2 = datenum(sdate2)-datenum(junk);  clear junk;           % needed for data directory
+whos sdate1; disp([sdate1 ' to ' sdate2]); fprintf('\n');
+try 
+   D1 = datenum(sdate1,'yyyy/mm/dd');
+   D2 = datenum(sdate2,'yyyy/mm/dd');
+catch
+   error('Incorrect Date Format')
+   return
+end
+[nyr1 nmn1 ndy1] = datevec(D1);
+[nyr2 nmn2 ndy2] = datevec(D2);
+if(nyr1 ~= nyr2) error('Use same year only'); return; end
+cyr1   = sdate1(1:4);     cmn1 = sdate1(6:7);     cdy1 = sdate1(9:10);
+cyr2   = sdate2(1:4);     cmn1 = sdate2(6:7);     cdy1 = sdate2(9:10);
+  junk = sprintf('%4d/%02d/%02d',nyr1-1,12,31);
+jdy1   = datenum(sdate1)-datenum(junk);  clear junk;           % needed for data directory
+  junk = sprintf('%4d/%02d/%02d',nyr2-1,12,31);
+jdy2   = datenum(sdate2)-datenum(junk);  clear junk;           % needed for data directory
 
-% Check channel numbers entered correctly
-if(length(cchns) > 10 || length(cchns) < 1 ) fprintf(1,'Wrong number channels\n'); end
-if(min(cchns) < 1 || max(cchns) > 1317 ) fprintf(1,'Wrong channel numbers used\n'); end
+% ------------------------------------
+% Get SNO files by dates as requested:
+dp     = ['/home/chepplew/data/sno/airs_cris/JPL/standard/' cyr1 '/'];
+snoLst = dir(strcat(dp, 'sno_airs_cris_*.mat'));
 
-% get list of good AIRS channels (nig) to use, & bad (nib) to avoid
+ifn1 = 1;             % default start with first file unless later.
+for i=1:numel(snoLst)
+  junk = regexp(snoLst(i).name,'[0-9]','match');
+  junk = cell2mat(junk);
+  thisdat = datenum(junk,'yyyymmdd');
+  if(thisdat <= D1) ifn1 = i; end
+  if(thisdat <= D2) ifn2 = i; end
+end
+fprintf(1,'Loading %d SNO files from: %s to %s\n',(ifn2-ifn1+1),snoLst(ifn1).name, ...
+        snoLst(ifn2).name);
+
+% --------------------------------------------------
+% Get number of SNO pairs used to initialize arrays:
+clear fs na;
+for i=ifn1:1:ifn2;
+  vars = whos('-file',strcat(dp,snoLst(i).name));
+  if( ismember('raDecon', {vars.name}) )                   % AIRS->CrIS is present
+    alat = load([dp snoLst(i).name],'alat');
+    fs(i) = length(alat.alat);
+    fprintf(1,'.')
+  end
+end
+na = sum(fs); clear alat;
+disp(['total SNO pairs to load: ' num2str(na)]);
+
+% ------------------------------------------------------------
+% get channel lists (need to know in advance which are stored)
 load('/home/chepplew/projects/airs/master_nig_01_2009.mat');   % nig [1 x 1535]
 % nig = importdata('/home/strow/Work/Airs/good_chan_list');
 junk = ismember([1:2378], nig);  nib = find(junk == 0);  clear junk;
 
-xx=load('/asl/data/airs/airs_freq.mat'); fa=xx.freq; clear xx;
-xx=load('cris_freq_nogrd.mat'); f_cris=xx.vchan; clear xx;  % 1305 chns (no guard chans)
-xx=load('cris_freq_2grd.mat');  fc = xx.vchan; clear xx;    % 1317 chns (12 guard chans)
-fd = f_cris([1:1037 1158:1305]);                            % prior knowledge from Howards decon routine
+xx = load('/home/chepplew/projects/airs/airs_f.mat'); 
+  f2645 = xx.fairs;  f2378 = xx.f; clear xx;
+xx = load('cris_freq_nogrd.mat');     fc_ng = xx.vchan;       % 1305 chns (no guard chans)
+xx = load('cris_freq_2grd.mat');      fc_2g = xx.vchan;       % 1317 chns (12 guard chans)
+load('/home/chepplew/projects/sno/airs_cris/fa2c_x.mat');     % fa2c: 1185 frm HM decon routine
 
-% Screen the channel selection for AIRS bad channels and update if necessary:
-cWavs = fc(cchns);
-for i=1:numel(cWavs)
-  tmp     = find(fa  > cWavs(i)-0.1,1);
-  aref    = find(nig > tmp,1);  achn(i) = nig(aref);
-end
-cWavs = fa(achn);
-for i=1:numel(cWavs)
-  cchn(i) = find(fc  > cWavs(i)-0.25, 1);
-  dchn(i) = find(fd  > cWavs(i)-0.25, 1);
-end
-for i=1:numel(cWavs) sWavs{i}  = sprintf('%6.2f',cWavs(i)); end
-s.Wavs  = cWavs; 
-s.sWavs = sWavs;
+% rc (CrIS) radiances are supplied on 1317 channel grid (2 guard channels)
+% Get the channels to load rc.
+[xf, cchns] = intersect(fc_2g, fc_ng(xchns));
 
-% ************* load up SNO data ********************
-dp = '/asl/s1/chepplew/projects/sno/airs_cris/JPL/v10_0_0/'; % /standard/';
-%%%snoLst = dir(strcat(dp,'sno_airs_cris_*.mat'));
-unix(['cd ' dp '; find . -noleaf -type f -name ''sno_airs_cris_2013*.mat'' -printf ''%P\n'' > /tmp/fn.txt;']);
+% ra2c (airs2cris) is supplied on 1185 channel grid
+% Get the channels to load ra2c
+[~, dchns] = intersect(fa2c, xf);                        %  maps fc onto fa2c
+
+% the A2C channels are a subset of the CrIS channels
+[iwant,~] = seq_match(fc_2g(cchns), fa2c(dchns));
+
+ % map AIRS good chans to 2645 grid (not used here)
+[zi zj] = seq_match(sort(f2378(nig)), f2645);
+  
+% Get the AIRS channels to load and record CrIS and A2C frequencies.
+achns = [find(f2645 >= fc_ng(xchns(1)),1):find(f2645 >= fc_ng(xchns(end)),1)-1];
+s.fc   = fc_2g(cchns(iwant))';  
+s.fa   = f2645(achns);
+s.fa2c = fa2c(dchns);
+
+% for plotting at the end:
+bands = [640, 900; 900, 1320; 1300 2560];                  % fcris(ichns(1):ichns(end));
+bands = [640, 1100; 1200, 1760; 2150 2550];                % fcris(ichns(1):ichns(end));
+bands = [650, 1095; 1210, 1615; 2182 2550];
+
+
+% ------------- load data into memory --------------------- %
+clear g;
+n1 = 1;
+s.ra    = single(zeros(length(achns),na)); 
+s.rc    = single(zeros(length(iwant),na)); 
+s.ra2c  = single(zeros(length(dchns),na)); 
+s.ctim  = [na]; s.atim = [na]; s.cifov = single(zeros(1,na));
+s.alat  = single(zeros(1,na)); s.alon  = single(zeros(1,na));  
+s.clat  = single(zeros(1,na)); s.clon  = single(zeros(1,na)); 
+s.csolz = single(zeros(1,na)); s.asolz = single(zeros(1,na)); 
+s.cland = single(zeros(1,na)); s.aland = single(zeros(1,na));
+s.td    = single(zeros(1,na)); s.dsn   = single(zeros(1,na));
+for ifnum = ifn1:1:ifn2
+  n2 = n1 + fs(ifnum)-1;
+  vars = whos('-file',strcat(dp,snoLst(ifnum).name));
+  if( ismember('raDecon', {vars.name}) )                   % AIRS->CrIS is present
+     g = load([snoLst(ifnum).folder '/' snoLst(ifnum).name]);
+     if( size(g.ra,2) == size(g.raDecon,2) )               % can get incomplete SNO pairs
+        s.ra(:,n1:n2)   = g.raScaf(achns,:);               % the L1C radiances
+        rc = single(hamm_app(double(g.rc(cchns(iwant),:))));
+	rd = single(hamm_app(double(g.raDecon(dchns,:))));
+	s.rc(:,n1:n2)   = rc;
+	s.ra2c(:,n1:n2) = rd;
+        s.csolz(n1:n2)  = g.csolzen;
+	s.asolz(n1:n2)  = g.asolzen;
+        s.td(n1:n2)     = g.tdiff;
+        s.dsn(n1:n2)    = g.dist;
+	s.clat(n1:n2)   = g.clat;      s.clon(n1:n2)  = g.clon;
+	s.alat(n1:n2)   = g.alat;      s.alon(n1:n2)  = g.alon;
+	s.ctim(n1:n2)   = g.ctime;     s.atim(n1:n2)  = g.atime;
+	s.cifov(n1:n2)  = g.cifov;
+	s.cland(n1:n2)  = g.clandfrac; s.aland(n1:n2) = g.alandfrac;
+      else
+        disp(['skip: ra .ne. raDecon. file: ' num2str(ifnum)]);
+      end
+  end
+  fprintf(1,'%03d ',ifnum);
+  n1 = n1 + fs(ifnum);
+end
+fprintf(1,'\n');
+clear g rc rd;
+[nx ny] = size(s.rc);
+fprintf(1,'number of SNO pairs: %d\n', ny);
+
+% ------------- Quality Control ---------------------
+disp(['Finding outliers: stored in s.ing']);
+acbias = single(s.rc - s.ra2c);
+clear gx;
+for i=1:length(dchns)
+   n  = single(remove_6sigma(acbias(i,:)));
+   nn = single(remove_6sigma(acbias(i,n)));
+   gx(i).n = n(nn);
+end
+% Now find unique set of bad SNO samples
+ux = [];
+[~, psz] = size(acbias);
+for i=1:length(dchns)
+   ux = [ux setdiff(1:psz,gx(i).n)];
+end
+ux  = unique(ux);
+s.ing = single(setdiff(1:psz,ux));
+disp(['  ' num2str(numel(ux)) ' outliers located']);
+clear gx n nn ux psz acbias;
+
+% --------------  save radiances here --------------------- %
+%{
+clear fa;     fa = s.fa; 
+clear fc;     fc = s.fc';
+clear fa2c; fa2c = s.fa2c;
+clear ra rc ra2c;
+ra = s.ra(:,s.ing);
+rc = s.rc(:,s.ing);
+ra2c = s.ra2c(:,s.ing);
+  whos fa fc fa2c ra rc ra2c;
+savfn = '/home/chepplew/data/sno/airs_cris/radiances/2013Q1_sno_airs_cris_jpl_lw.mat';
+save(savfn,'fa','fc','fa2c','ra','rc','ra2c','-v7.3');
+%}
+
+% --------------    subset night or day ---------------------
+idn = find(s.csolz);                                                    % include all scenes for LW and MW bands
+  s.idn = find(s.csolz > 95 & s.asolz > 95);
+  s.idd = find(s.csolz < 90 & s.asolz < 90);
+  fprintf(1,'Found %d day, %d night\n',numel(s.idd),numel(s.idn));
+% --------------    subset NH or SH ---------------------
+idn = find(s.clat);                                                    % include all scenes for LW and MW bands
+  s.ish = find(s.clat < 0);
+  s.inh = find(s.clat > 0);
+  fprintf(1,'Found %d north, %d south\n',numel(s.inh),numel(s.ish));
+% ----------------------------------------------------------------------- %
+
+
+%{
+% sanity plots
+cbt = real(rad2bt(s.fc(s.ichns), s.crad));
+dbt = real(rad2bt(s.fd(s.ichns), s.drad));
+figure(10);clf;plot(s.fc(s.ichns), nanmean(cbt,2),'-', s.fc(s.ichns), nanmean(dbt,2),'-');
+ich = 402   % (899.375)
+btbins = [190:1:330];  btcens = [190.5:1:329.5];
+pdf_c402 = histcounts(cbt(ich,:), btbins);
+pdf_d402 = histcounts(dbt(ich,:), btbins);
+figure(10);clf;plot(btcens, pdf_c402,'.-', btcens,pdf_d402,'.-');grid on;
+dbins = [-20:1:20];   dcens = [-19.5:1:19.5];
+pdf_bias = histcounts(dbt(ich,:) - cbt(402,:), dbins);
+figure(10);clf;plot(dcens, pdf_bias, '.-');grid on;
+
+
+% ------------- Get source data - start with preparation. ------------- %
+clear x cc ccs;
+unix(['cd ' dp '; find . -noleaf -maxdepth 1 -type f -name ''sno_airs_cris_2013*.mat'' -printf ''%P\n'' > /tmp/fn.txt;']);
 fh = fopen('/tmp/fn.txt');
 x  = fgetl(fh);
 i  = 1;
@@ -97,235 +262,7 @@ end
 fclose(fh);
 cc  = cellstr(cc);
 ccs = sort(cc);
-  %fullfile(dp,ccs{i})  Note that i = 1:length(ccs)
-  %snoLst = dir(strcat(dp,'sno_airs_cris_*.mat'));
 fprintf(1,'Found %d total SNO files\n',numel(ccs));
 
-% subset range by date as requested:
-dstart = datenum([nyr1 nmn1 ndy1]);
-dlast  = datenum([nyr2 nmn2 ndy2]);
-ifn1   = 1;
-for i=1:numel(ccs)
-  junk = ccs{i}(15:22);
-  %%%junk = snoLst(i).name(15:22);
-  thisdat = datenum( [str2num(junk(1:4)) str2num(junk(5:6)) str2num(junk(7:8))] );
-  if(thisdat <= dstart) ifn1 = i; end
-  if(thisdat <= dlast) ifn2 = i; end
-end
-fprintf(1,'Processing SNO files from: %s to %s\n',ccs{ifn1}, ccs{ifn2});
-
-% Load requested SNO data
-s.td   = [];   s.arad = [;]; s.crad = [;]; s.drad = [;]; s.ctim = [];  s.atim = []; 
-s.arlat = []; s.arlon = [];  s.dsn  = []; s.crlat = []; s.crlon = []; s.csolz = [];  
-s.alnfr = []; s.clnfr = [];  s.cifv  = [];
-a.nSam = [];  a.avrd = [;]; a.avra = [;]; a.avrc = [;]; a.sdra = [;];  a.sdrc = [;]; 
-a.sdrd = [;];
-a.avrx = struct('A',[],'B',[],'C',[],'D',[],'E',[],'F',[],'G',[],'H',[],'I',[]);
-a.cvrx = a.avrx; a.dvrx = a.avrx; a.avrs = a.avrx; a.cvrs = a.avrx;  a.dvrs = a.avrx; 
-a.s_nSam = a.avrx; SNames = fieldnames(a.avrx);
-d = struct; d.nSam = []; d.avrc = []; d.avrd = [];
-n = struct; n.nSam = []; n.avrc = []; n.avrd = [];
-
-for ifnum = ifn1:ifn2
-  clear idn inn;
-  vars = whos('-file',strcat(dp,ccs{ifnum}));
-  if( ismember('raDecon', {vars.name}) )              % AIRS->CrIS is present
-    %%%if(snoLst(ifnum).bytes > 1.0E4)
-      g = load(strcat(dp,ccs{ifnum}));
-      if(size(g.alat,1) < size(g.alat,2)) fprintf(1,'Unexpected row/column swapped\n'); end
-      s.arad  = [s.arad, g.ra(achn,:)];                % [arad, [ra(achn,:); avaw]]; etc
-      s.crad  = [s.crad, g.rc(cchn,:)];                % 1317 chns (12 guard chans)
-      s.drad  = [s.drad, g.raDecon(dchn,:)];           %
-      s.atim  = [s.atim,g.atime'];
-      s.ctim  = [s.ctim,g.ctime'];
-      s.arlat = [s.arlat,g.alat'];        s.arlon = [s.arlon,g.alon'];
-      s.crlat = [s.crlat,g.clat'];        s.crlon = [s.crlon,g.clon'];
-      s.cifv  = [s.cifv,g.cifov'];
-      s.td    = [s.td,g.tdiff'];                        % use [x,xd'] for JPL SNO
-      s.dsn   = [s.dsn,g.dist'];
-      s.csolz = [s.csolz,g.csolzen'];
-      %%s.alnfr = [s.alnfr, g.alandfrac'];  s.clnfr = [s.clnfr,g.clandfrac']; 
-
-      a.nSam  = [a.nSam,single(size(g.ra,2))];
-      a.avra  = [a.avra,nanmean(g.ra,2)];       a.sdra = [a.sdra,nanstd(g.ra,1,2)];  
-      a.avrc  = [a.avrc,nanmean(g.rc,2)];       a.sdrc = [a.sdrc,nanstd(g.rc,1,2)];
-      a.avrd  = [a.avrd,nanmean(g.raDecon,2)];  a.sdrd = [a.sdrd,nanstd(g.raDecon,1,2)];
-
-      idn     = find(g.csolzen < 90);
-      inn     = find(g.csolzen >= 90);
-      d.nSam  = [d.nSam, numel(idn)];
-      n.nSam  = [n.nSam, numel(inn)];
-      d.avrd  = [d.avrd, nanmean(g.raDecon(:,idn),2)];
-      d.avrc  = [d.avrc, nanmean(g.rc(:,idn),2)];
-      n.avrd  = [n.avrd, nanmean(g.raDecon(:,inn),2)];
-      n.avrc  = [n.avrc, nanmean(g.rc(:,inn),2)];
-
-      for k=1:9 incf{k} = find(g.cifov == k); 
-        a.avrx.(SNames{k}) = [a.avrx.(SNames{k}), nanmean(g.ra(:,incf{k}),2)]; 
-        a.cvrx.(SNames{k}) = [a.cvrx.(SNames{k}), nanmean(g.rc(:,incf{k}),2)]; 
-        a.dvrx.(SNames{k}) = [a.dvrx.(SNames{k}), nanmean(g.raDecon(:,incf{k}),2)];
-        a.avrs.(SNames{k}) = [a.avrs.(SNames{k}), nanstd(g.ra(:,incf{k}),1,2)]; 
-        a.cvrs.(SNames{k}) = [a.cvrs.(SNames{k}), nanstd(g.rc(:,incf{k}),1,2)]; 
-        a.dvrs.(SNames{k}) = [a.dvrs.(SNames{k}), nanstd(g.raDecon(:,incf{k}),1,2)]; 
-	a.s_nSam.(SNames{k}) = [a.s_nSam.(SNames{k}), size(g.ra(:,incf{k}),2)]; 
-      end
-
-    %%%else
-    %%%  fprintf('%d insufficient number samples\n',ifnum)
-    %%%end
-  else
-    fprintf('skip %s ',ccs{ifnum}(15:22) );
-  end
-  fprintf('.');
-end    
-fprintf('\n');
-s.td2 = s.atim - s.ctim;              % tdiff from JPL are exclusively real positive -WRONG
-fprintf(1,'Total sample size %d. Night: %d. Day: %d\n',size(s.td,2),...
-    sum(n.nSam), sum(d.nSam));
-
-% Compute averages and standard deviations
-
-azero=zeros(2378,1); czero=zeros(1317,1); dzero=zeros(1185,1);
-ratpm=0; rctpm=0; rdtpm=0; ratps=0; rctps=0; rdtps=0; ratxs=0; rctxs=0; rdtxs=0;
-ratxm = struct('A',[],'B',[],'C',[],'D',[],'E',[],'F',[],'G',[],'H',[],'I',[]);
-rctxm = struct('A',[],'B',[],'C',[],'D',[],'E',[],'F',[],'G',[],'H',[],'I',[]);
-rdtxm = struct('A',[],'B',[],'C',[],'D',[],'E',[],'F',[],'G',[],'H',[],'I',[]);
-ratxs = struct('A',[],'B',[],'C',[],'D',[],'E',[],'F',[],'G',[],'H',[],'I',[]);
-rctxs = struct('A',[],'B',[],'C',[],'D',[],'E',[],'F',[],'G',[],'H',[],'I',[]);
-rdtxs = struct('A',[],'B',[],'C',[],'D',[],'E',[],'F',[],'G',[],'H',[],'I',[]);
-for k=1:9 
-  ratxm.(SNames{k}) = azero;   ratxs.(SNames{k}) = azero;
-  rctxm.(SNames{k}) = czero;   rctxs.(SNames{k}) = czero;
-  rdtxm.(SNames{k}) = dzero;   rdtxs.(SNames{k}) = dzero;
-end
-for i = 1:numel(a.nSam)
-  ratpm = ratpm + a.avra(:,i).*a.nSam(i);    rctpm = rctpm + a.avrc(:,i).*a.nSam(i);
-  rdtpm = rdtpm + a.avrd(:,i).*a.nSam(i);
-  ratps = ratps + ( a.sdra(:,i).*a.sdra(:,i) + a.avra(:,i).*a.avra(:,i) )*a.nSam(i);
-  rctps = rctps + ( a.sdrc(:,i).*a.sdrc(:,i) + a.avrc(:,i).*a.avrc(:,i) )*a.nSam(i);
-  rdtps = rdtps + ( a.sdrd(:,i).*a.sdrd(:,i) + a.avrd(:,i).*a.avrd(:,i) )*a.nSam(i);
-  for k = 1:9;
-    ratxm.(SNames{k}) = ratxm.(SNames{k}) + a.avrx.(SNames{k})(:,i).*a.s_nSam.(SNames{k})(i);    
-    rctxm.(SNames{k}) = rctxm.(SNames{k}) + a.cvrx.(SNames{k})(:,i).*a.s_nSam.(SNames{k})(i);
-    rdtxm.(SNames{k}) = rdtxm.(SNames{k}) + a.dvrx.(SNames{k})(:,i).*a.s_nSam.(SNames{k})(i);
-    ratxs.(SNames{k}) = ratxs.(SNames{k}) + ( a.avrs.(SNames{k})(:,i).^2  + ...
-                         a.avrx.(SNames{k})(:,i).^2 ).*a.s_nSam.(SNames{k})(i);
-    rctxs.(SNames{k}) = rctxs.(SNames{k}) + ( a.cvrs.(SNames{k})(:,i).^2  + ...
-                         a.cvrx.(SNames{k})(:,i).^2 ).*a.s_nSam.(SNames{k})(i);
-    rdtxs.(SNames{k}) = rdtxs.(SNames{k}) + ( a.dvrs.(SNames{k})(:,i).^2  + ...
-                         a.dvrx.(SNames{k})(:,i).^2 ).*a.s_nSam.(SNames{k})(i);
-  end
-end
-%
-a.ragxm = struct('A',[],'B',[],'C',[],'D',[],'E',[],'F',[],'G',[],'H',[],'I',[]);
-a.rcgxm = struct('A',[],'B',[],'C',[],'D',[],'E',[],'F',[],'G',[],'H',[],'I',[]);
-a.rdgxm = struct('A',[],'B',[],'C',[],'D',[],'E',[],'F',[],'G',[],'H',[],'I',[]);
-%
-a.gavrm = ratpm/sum(a.nSam);  a.gcvrm = rctpm/sum(a.nSam);  a.gdvrm = rdtpm/sum(a.nSam);
-for k = 1:9
-  a.ragxm.(SNames{k}) = ratxm.(SNames{k})/sum( a.s_nSam.(SNames{k})(:) );
-  a.rcgxm.(SNames{k}) = rctxm.(SNames{k})/sum( a.s_nSam.(SNames{k})(:) );
-  a.rdgxm.(SNames{k}) = rdtxm.(SNames{k})/sum( a.s_nSam.(SNames{k})(:) );
-end
-%
-a.ragxs = struct('A',[],'B',[],'C',[],'D',[],'E',[],'F',[],'G',[],'H',[],'I',[]);
-a.rcgxs = struct('A',[],'B',[],'C',[],'D',[],'E',[],'F',[],'G',[],'H',[],'I',[]);
-a.rdgxs = struct('A',[],'B',[],'C',[],'D',[],'E',[],'F',[],'G',[],'H',[],'I',[]);
-%
-a.gadrs = real(sqrt( ratps/sum(a.nSam) - a.gavrm.*a.gavrm ));
-a.gcdrs = real(sqrt( rctps/sum(a.nSam) - a.gcvrm.*a.gcvrm ));
-a.gddrs = real(sqrt( rdtps/sum(a.nSam) - a.gdvrm.*a.gdvrm ));
-a.garse = a.gadrs/sqrt(sum(a.nSam));   a.gcrse = a.gcdrs/sqrt(sum(a.nSam));
-a.gdrse = a.gddrs/sqrt(sum(a.nSam));
-for k = 1:9
-  a.ragxs.(SNames{k}) = real(sqrt( ratxs.(SNames{k})/sum(a.s_nSam.(SNames{k})) - ...
-                      a.ragxm.(SNames{k}).^2 ));
-  a.ragxe.(SNames{k}) = a.ragxs.(SNames{k})./sqrt(sum(a.s_nSam.(SNames{k})));
-  a.rcgxs.(SNames{k}) = real(sqrt( rctxs.(SNames{k})/sum(a.s_nSam.(SNames{k})) - ...
-                      a.rcgxm.(SNames{k}).^2 ));
-  a.rcgxe.(SNames{k}) = a.rcgxs.(SNames{k})./sqrt(sum(a.s_nSam.(SNames{k})));
-  a.rdgxs.(SNames{k}) = real(sqrt( rdtxs.(SNames{k})/sum(a.s_nSam.(SNames{k})) - ...
-                      a.rdgxm.(SNames{k}).^2 ));
-  a.rdgxe.(SNames{k}) = a.rdgxs.(SNames{k})./sqrt(sum(a.s_nSam.(SNames{k})));
-end
-
-
-%{
-% plot options
-addpath /asl/matlab2012/aslutil                   % simplemap.m
-addpath /asl/matlib/plotutils                     % aslprint.m
-
-junk = ones(1,size(s.td2,2)); junk = s.td2*86400; junk = s.dsn;
-figure(1);clf;simplemap(s.arlat, s.arlon, junk); title('AIRS CRIS SNO map 2013 w/delay (s)');
-  % aslprint('AirsCrisLrC_SNO_2013_locMap_wDelay.png');
-figure(2);clf;semilogy(fa,a.avra(:,1),'b',fc,a.avrc(:,1),'m',fd,a.avrd(:,1),'c');grid;
-figure(3);clf;hist(s.arlat,180),xlim([-90 90]);
-   xlabel('latitude bin');ylabel('population');title('AIRS CRIS stnd SNO All data Distribution');
-   % aslprint('AirsCris_AllSno_lat_hist.png')
-
-abtm  = real(rad2bt(fa,a.gavrm));
-cbtm  = real(rad2bt(fc,a.gcvrm));
-dbtm  = real(rad2bt(fd,a.gdvrm));
-incd  = find(ismember(fc, fd));
-biasm = dbtm - cbtm(incd);
-
-btm   = 0.5*(dbtm + cbtm(incd));
-mdr   = 1E-3*(1./drdbt(fd,btm') );
-drse  = sqrt((a.gddrs.^2 + a.gcdrs(incd).^2))/sqrt(sum(a.nSam));
-dbse  = mdr.*drse';
-
-
-
-figure(3);clf;hist(abt(4,:),100); xlabel('B.T. (K)');ylabel('population');
-   title('AIRS All Sample SNO 1414 wn population'); % set(gca, 'YScale', 'log')
-   % aslprint('AirsCris_AllSno_1414wn_hist.png')
-figure(3);clf;plot(fa,abt,'b',fc,cbt,'c',fd,dbt,'g');
-figure(3);clf;plot(fd,biasm,'m');axis([640 2650 -inf inf]);grid;
-
-% --------------------------------
-%          Day night
-% --------------------------------
-n.rctpm = 0; n.rdtpm = 0; n.mbias = 0;
-for i = 1:numel(n.nSam)
-  n.rctpm = n.rctpm + n.avrc(:,i).*n.nSam(i);
-  n.rdtpm = n.rdtpm + n.avrd(:,i).*n.nSam(i);
-end
-n.rctpm = n.rctpm/sum(n.nSam);
-n.rdtpm = n.rdtpm/sum(n.nSam);
-n.cbtm  = real(rad2bt(fc,n.rctpm));
-n.dbtm  = real(rad2bt(fd,n.rdtpm));
-incd    = find(ismember(fc, fd));
-n.mbias = n.dbtm - n.cbtm(incd);
-
-figure(4);clf;subplot(2,1,1);plot(fc,n.cbtm,'b',fd,n.dbtm,'g');grid on;
-  subplot(2,1,2);plot(fd,n.mbias,'m');grid on;
-
-d.rctpm = 0; d.rdtpm = 0; d.mbias = 0;
-d.nanc = find(isnan(d.avrc));   d.avrc(d.nanc) = 0;
-d.nand = find(isnan(d.avrd));   d.avrd(d.nand) = 0;
-for i = 1:numel(d.nSam)
-  d.rctpm = d.rctpm + d.avrc(:,i).*d.nSam(i);
-  d.rdtpm = d.rdtpm + d.avrd(:,i).*d.nSam(i);
-end
-d.rctpm = d.rctpm/sum(d.nSam);
-d.rdtpm = d.rdtpm/sum(d.nSam);
-d.cbtm  = real(rad2bt(fc,d.rctpm));
-d.dbtm  = real(rad2bt(fd,d.rdtpm));
-incd    = find(ismember(fc, fd));
-d.mbias = d.dbtm - d.cbtm(incd);
-
-figure(5);clf;
-  h1=subplot(2,1,1);plot(fc,d.cbtm,'b',fd,d.dbtm,'g');grid on;axis([2170 2580 210 280]);
-  title('2013 A-C SNO SW Mean');ylabel('BT K');
-  h2=subplot(2,1,2);plot(fd,d.mbias,'m.-',fd,n.mbias,'c.-');grid on;
-    axis([2170 2580 -1.5 1.5]);xlabel('wn cm-1');ylabel('bias BT K');
-    legend('day','night','Location','north');
-  ha=findobj(gcf,'type','axes');
-  linkaxes([h1 h2],'x');set(h1,'xticklabel','');pp=get(h1,'position');
-  set(h1,'position',[pp(1) pp(2)-pp(4)*0.1 pp(3) pp(4)*1.1])
-  pp=get(h2,'position'); set(h2,'position',[pp(1) pp(2) pp(3) pp(4)*1.1]);
-  %aslprint('./figs/AC_SNO_2013_DN_biasBT_SW.png');
 
 %}
-
-end

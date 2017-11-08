@@ -1,44 +1,258 @@
+function qnstats = plot_sno_airs_cris_jpl_mat(s)
+%
 % plot_sno_airs_cris_jpl_mat.m
 %
-% Working with data supplied by: allchns_sno_airs_cris_jpl_mat.m
-%  first run: [ sa qn ] = allchns_sno_airs_cris_jpl_mat('2013/01/01', 1);
+% Produces stats with data supplied by: load_sno_airs_cris_jpl_mat.m
+% and then selection of plts
+%
+%  first run: s = load_sno_airs_cris_jpl_mat(sdate1,sdate2, xchns);
+%
+% Results: 
+%        qnstats: structure with fields of data derived from quantiles:
+%        qnstats.cbm            CrIS mean spectral BT of the global sample.
+%        qnstats.dbm            A2C  mean spectral BT of the global sample.
+%        qnstats.wn             wavenumbers in group. [nv size]
+%        qnstats.stderr         standard error of the mean bias of the global sample.
+%        qnstats.bias{jj}       bias in quantile bin [nq x nv cells]
+%        qnstats.btser{jj}      std error of mean bias in quantile bin [nq x nv cells]
+%        qnstats.binqa{jj}      Quantile BT bins used [nq x nv cells] 
+%        qnstats.binsz{jj}      Sample population in each quantile bin [nq x nv cells]
+%        qnstats.b:             weighted mean bias from all quantile bins [713 x 3 single]
+%        qnstats.mx:            Maximum BT bias found in each quantile bin [713 x 3 single]
+%        qnstats.mn:            Minimum BT bias found in each quantile bin [713 x 3 single]
+%        qnstats.ph:            the scene temp at which the max BT bias occurs [713 x 3 single]
+%        qnstats.pl:            the scene temp at which the min BT bias occurs[713 x 3 single]
+%        qnstats.blo:           low-end BT of quantile bin corresp. to qlo [713 x 3 single]
+%        qnstats.bhi:           high-end BT of quantile bin corresp. to qhi.[713 x 3 single]
+%        qnstats.qlo:           low-end quantile bin number [713 x 3 double]
+%        qnstats.qhi:           high-end quantile bin number [713 x 3 double]
+%
 
-addpath /asl/matlib/plotutils              % aslprint.m
+
+addpath /asl/matlib/plotutils                     % aslprint.m
+addpath /home/strow/Git/breno_matlab/Math         % Math_bin.m
+addpath /asl/matlab2012/aslutil/                  % drdbt.m
 
 % Home for plots (set to where the paper is being written)
 phome = '/home/chepplew/projects/sno/airs_cris/figs/';
 phome = '/home/chepplew/projects/sno/sno_paper_2016/figs/';
 
-%
-% Prep some data:
+% Initialize
+idx = struct; 
+abm = struct;
+cbm = struct;
+dbm = struct;
+
+% Prep bands for convenience:
 igrp  = 1;
 bands = [650, 1095; 1210, 1615; 2182 2550];
 
-% load the frequency grids:
-[xd, xc] = seq_match(sa.fd, sa.fc);                             % track indexes for both grids
+% -----------------------------------------------------------------------------------
+% Convert rad to BT, General stats used in next sections. Remove bad data first:
+idx.all = s.ing;
+idx.day = intersect(s.ing, s.idd); disp(['day: ' num2str(numel(idx.day))]);
+idx.nit = intersect(s.ing, s.idn); disp(['night: ' num2str(numel(idx.nit))]);
+idx.nor = intersect(s.ing, s.inh); disp(['north: ' num2str(numel(idx.nor))]);
+idx.sou = intersect(s.ing, s.ish); disp(['south: ' num2str(numel(idx.sou))]);
 
-nLW = 713; nMW = 324; nSW = 148;
-if (igrp < 1 || igrp > 3) fprintf(1,'igrp out of range (1 to 3)\n'); exit; end
-if(igrp == 1) sa.ichns = [1:nLW];          cband = 'LW'; nchns = nLW;  end
-if(igrp == 2) sa.ichns = [nLW+1: nLW+nMW]; cband = 'MW'; nchns = nMW;  end
-if(igrp == 3) sa.ichns = [nLW+nMW+1:1185]; cband = 'SW'; nchns = nSW;  end
+% **** Choose which subset to use  ****
+iidx = idx.all;   csub='all';
 
-% simplify the frequency range
-fa = sa.fa(sa.achns);
-fc = sa.fc(xc(sa.ichns));
-fd = sa.fd(xd(sa.ichns));
-
-% Convert rad to BT, do global stats (also used in next section)  
-% remove bad data first:
-idx = sa.ing;
-abt = single(rad2bt(fa, sa.arad(:,idx)));
-cbt = single(rad2bt(fc, sa.crad(:,idx)));
-dbt = single(rad2bt(fd, sa.drad(:,idx)));
+nz  = length(iidx);
+abt = single(rad2bt(s.fa, s.ra(:,iidx)));
+cbt = single(rad2bt(s.fc, s.rc(:,iidx)));
+dbt = single(rad2bt(s.fa2c, s.ra2c(:,iidx)));
 abm = nanmean(abt,2);
 cbm = nanmean(cbt,2);
 dbm = nanmean(dbt,2);
 
-figure(1);clf;plot(fa,abm,'-',fc,cbm,'-',fd,dbm,'-');
+radstd   = nanstd( s.ra2c(:,iidx) - s.rc(:,iidx), 0, 2 );
+cdbm     = 0.5*( nanmean(dbt,2) + nanmean(cbt,2) );
+  mdr    = 1E-3*( 1./drdbt(s.fc,cdbm) );
+btstd    = mdr.*radstd;  
+stderr   = btstd./sqrt(nz);
+  whos idx cbt dbt crad drad cbm dbm radstd btstd stderr
+
+%% ------------------------------------------------------------ %%
+
+%cbm.day  = nanmean(single(rad2bt(s.fc,   s.rc(:,idx.day))),2);
+%cbm.nit  = nanmean(single(rad2bt(s.fc,   s.rc(:,idx.day))),2);
+%cbm.nor  = nanmean(single(rad2bt(s.fc,   s.rc(:,idx.day))),2);
+%cbm.sou  = nanmean(single(rad2bt(s.fc,   s.rc(:,idx.day))),2);
+%dbm.day  = nanmean(single(rad2bt(s.fa2c, s.ra2c(:,idx.day))),2);
+
+
+% -------------------- histograms --------------------------- %
+btbins = [180:1:340];
+btcens = [btbins(1)+0.5:1:btbins(end)-0.5];
+nach = length(s.fa); ncch = length(s.fa2c); cich = 402; 
+for i=1:nach pdf_abt(i,:) = histcounts(abt(i,:),btbins);  end 
+for i=1:ncch pdf_cbt(i,:) = histcounts(cbt(i,:),btbins);  end
+for i=1:ncch pdf_dbt(i,:) = histcounts(dbt(i,:),btbins);  end
+
+% ----------------------- quantiles ------------------------- %
+disp('working on quantiles...');
+
+% Get quantile profiler and set to prf.
+%load('/home/strow/Matlab/Sno/prob_vector.mat');  yp = p(1:200:end);
+load('/home/chepplew/projects/sno/prob_vector61.mat');               % p [1x61]
+% Alternate profiler - softer tails than p.
+junk = 0.0:0.1:10; yp = sigmf(junk,[2 4]); clear junk; 
+junk = [-5:.05:5]; y0 = normpdf(junk,0,1); yp = cumsum(y0)./20.0; clear junk y0;
+% Choose which profiler to use (goes in prf)
+prf  = yp;
+
+% create the scene bins for each channel
+clear qsBins qxBins qdBins qx qd;
+qxBins.B = quantile(cbt,prf,2);
+qdBins.B = quantile(dbt,prf,2);
+qx       = cell2mat(struct2cell(qxBins));
+qd       = cell2mat(struct2cell(qdBins));
+qsBins   = (qx + qd)/2.0;                        % x:AIRS & d:IASI-to-AIRS
+
+% populate the scene bins for each channel (jj)
+% NB the s.crad, s.drad have not been subset.
+clear binsz btbias radstd cdbm btstd btser bias250 num_cbin num_dbin;
+for jj = 1:length(s.fc)
+  sbins = qsBins(jj,:);
+  clear dbin dbinStd dbinN dbinInd xbin xbinStd xbinN xbinInd ubinInd;
+  [dbin dbinStd dbinN dbinInd] = Math_bin(dbt(jj,:),cbt(jj,:)-dbt(jj,:),sbins); 
+  [cbin cbinStd cbinN cbinInd] = Math_bin(cbt(jj,:),cbt(jj,:)-dbt(jj,:),sbins);
+
+  % diagnostics: record the separate number samples in each bin:
+  num_cbin(jj,:) = cbinN;
+  num_dbin(jj,:) = dbinN;
+  
+  for i = 1:length(dbin)                                                       
+    ubinInd{i} = {union(dbinInd{i},cbinInd{i})};                  
+  end
+
+  for i = 1:length(dbin)
+    binsz(jj,i)   = cellfun('length',ubinInd{i});
+    btbias(jj,i)  = nanmean( dbt(jj,cell2mat(ubinInd{i})) - cbt(jj,cell2mat(ubinInd{i})) );
+    radstd(jj,i)  = nanstd( s.ra2c(jj,iidx(cell2mat(ubinInd{i}))) - ...
+                            s.rc(jj,iidx(cell2mat(ubinInd{i}))) );
+    cdbm(i)       = 0.5*( nanmean(dbt(jj,cell2mat(ubinInd{i}))) +  ...
+                          nanmean(cbt(jj,cell2mat(ubinInd{i}))) );
+         mdr      = 1E-3*( 1./drdbt(s.fa2c(jj),cdbm(i)) );
+    btstd(jj,i)   = mdr.*radstd(jj,i);  
+    btser(jj,i)   = btstd(jj,i)./sqrt(binsz(jj,i));
+    %%bias250(jj,i) = btbias(jj,i)./drd250(jj);                 % option hard wired
+  end
+  jtot  = sum(binsz(jj,:));
+  jmdr  = 1E-3*( 1./drdbt(s.fa2c(jj),cbm(jj)) );
+  jbtse = jmdr.* nanstd(s.ra2c(jj,iidx) - s.rc(jj,iidx),1,2) / sqrt(jtot);
+  fprintf(1,'.');
+end
+fprintf(1,'\n');
+
+% parameter fitting section
+% -------------------------
+qnstats        = struct;
+qnstats.cbm    = cbm;
+qnstats.dbm    = dbm;
+qnstats.wn     = s.fa2c;
+qnstats.stderr = stderr;
+
+for jj = 1:length(s.fa2c)
+  clear junk;
+  qnstats.bias{jj}  = btbias(jj,:);
+  qnstats.btser{jj} = btser(jj,:);
+  qnstats.binqa{jj} = qsBins(jj,1:end-1);
+  qnstats.binsz{jj} = single(binsz(jj,:));
+
+  % weighted mean & stats section
+  % -----------------------------
+  % 1. full range
+  % ----------
+  qlo(jj,1)  = 1;
+  qhi(jj,1)  = 200;
+  jtot = sum(binsz(jj,:));
+  for i = 1:length(dbin)
+    junk(i) = binsz(jj,i).*btbias(jj,i)/jtot;
+  end
+  qnstats.b(jj,1)   = nansum(junk);  
+  qnstats.mx(jj,1)  = nanmax(btbias(jj,:));  
+  qnstats.mn(jj,1)  = nanmin(btbias(jj,:));
+  qnstats.blo(jj,1) = qsBins(jj,1);
+  qnstats.bhi(jj,1) = qsBins(jj,end);
+  qnstats.ph(jj,1)  = qsBins(jj, find(btbias(jj,:) == nanmax(btbias(jj,:)),1) );
+  qnstats.pl(jj,1)  = qsBins(jj, find(btbias(jj,:) == nanmin(btbias(jj,:)),1) );
+  clear junk;
+  % -------------------------------
+  % 2. range set by min sample size
+  % -------------------------------
+  % range select by bin size > 500 samples
+  inband    = find(binsz(jj,:) > 500);
+  qlo(jj,2) = min(inband); 
+  qhi(jj,2) = max(inband);                                      % was min(max(inband), find(qsBins(jj,:) > 297,1));
+  jtot = sum(binsz(jj,qlo(jj,2):qhi(jj,2)));
+  for i = qlo(jj,2):qhi(jj,2)
+    junk(i) = binsz(jj,i).*btbias(jj,i)/jtot;
+  end
+  qnstats.b(jj,2)   = nansum(junk);  clear junk;
+  qnstats.mx(jj,2)  = nanmax(btbias(jj,qlo(jj,2):qhi(jj,2)));  
+  qnstats.mn(jj,2)  = nanmin(btbias(jj,qlo(jj,2):qhi(jj,2)));
+  qnstats.blo(jj,2) = qsBins(jj,qlo(jj,2));
+  qnstats.bhi(jj,2) = qsBins(jj,qhi(jj,2));
+  qnstats.ph(jj,2)  = qsBins(jj,find(btbias(jj,:) == nanmax(btbias(jj,qlo(jj,2):qhi(jj,2))),1) ); 
+  qnstats.pl(jj,2)  = qsBins(jj,find(btbias(jj,:) == nanmin(btbias(jj,qlo(jj,2):qhi(jj,2))),1) );
+  % ---------------------------------------
+  % 3. range set by max std.err & bin size.
+  % ---------------------------------------
+  inband = find(btser(jj,:) < 0.04 & binsz(jj,:) > 500);        % highly tuned by trial n error
+  if(numel(inband) < 2) fprintf(1,'ichn: %d\t Std Err too large\n',jj); continue; end
+  qlo(jj,3) = min(inband);                                      % prob OK for all wns. 
+  qhi(jj,3) = max(inband);
+  jtot = sum(binsz(jj,qlo(jj,3):qhi(jj,3)));
+  for i = qlo(jj,3):qhi(jj,3)
+    junk(i) = binsz(jj,i).*btbias(jj,i)/jtot;
+  end
+  qnstats.b(jj,3)   = nansum(junk);  clear junk;
+  qnstats.mx(jj,3)  = nanmax(btbias(jj,qlo(jj,3):qhi(jj,3)));  
+  qnstats.mn(jj,3)  = nanmin(btbias(jj,qlo(jj,3):qhi(jj,3)));
+  qnstats.blo(jj,3) = qsBins(jj,qlo(jj,3));
+  qnstats.bhi(jj,3) = qsBins(jj,qhi(jj,3));
+  qnstats.ph(jj,3)  = qsBins(jj,find(btbias(jj,:) == nanmax(btbias(jj,qlo(jj,3):qhi(jj,3))),1) );
+  qnstats.pl(jj,3)  = qsBins(jj,find(btbias(jj,:) == nanmin(btbias(jj,qlo(jj,3):qhi(jj,3))),1) );
+    
+end
+qnstats.qlo = qlo;
+qnstats.qhi = qhi;
+
+% save file
+% ---------
+savfn = ['AC_jplSNO_2013_qnstats_' csub '.mat'];
+
+%{
+fprintf(1,'Saving: %s\n',savfn);
+save(['/home/chepplew/data/sno/airs_cris/' savfn],'s','qnstats','-v7.3');
+%}
+%{
+% display summary of results for selected channel
+% -----------------------------------------------
+find(s.fc(s.ichns) > 900,1);
+jj = 402;
+sfnam = fieldnames(wmstats);
+disp([wmstats.wn(jj)]);
+% display stats for selected wavenumber. (the three methods should be similar)
+for i = 9:length(sfnam)
+  %disp([sfnam{i}  wmstats.(sfnam{i})(jj,:)]);
+  fprintf(1,'%s    \t%8.4f\t%8.4f\t%8.4f\n', sfnam{i}, wmstats.(sfnam{i})(jj,:) );
+end
+%}
+%{
+% -------------------------------------------------------------------------------
+%                     Plotting Section
+% -------------------------------------------------------------------------------
+
+figure(1);plot(s.fa,abm,'-', s.fc, cbm,'-',s.fa2c,dbm,'-');grid on;legend('AIRS','CrIS','A2C');
+figure(1);plot(s.fc, cbm - dbm, '-', s.fc,100*stderr,'-');grid on;
+  legend('Cris - Airs','100*std.error');axis([640 1100 -0.7 0.7]);
+  xlabel('wavenumber cm^{-1}');ylabel('CrIS - AIRS (K)');
+  title('2013 JPL AC SNO Bias LW');
+  %aslprint([phome '2013_ac_jpl_sno_bias_stderr_lw_08112017.png'])
+
 figure(1);clf;plot(qn.wn, qn.cbm,'b-',qn.wn,qn.dbm,'g-');grid on;
 figure(1);clf;[hax,hl1,hl2]=plotyy(qn.wn,qn.cbm - qn.dbm, ... 
   qn.wn,qn.stderr);grid on;
@@ -50,51 +264,17 @@ figure(1);clf;[hax,hl1,hl2]=plotyy(qn.wn,qn.cbm - qn.dbm, ...
   % aslprint('../figs/AC_jplSNO_Bias_stdErr_LW.png',1);
 
 
-%% --------------------------------------------------------------------- %%
-% Choose which subset to use
-clear day nit nor sou;
-if(LDAY) clear idx; idx = intersect(sa.ing, sa.idd); disp([num2str(numel(idx))]); end
-if(LNIT) clear idx; idx = intersect(sa.ing, sa.idn); disp([num2str(numel(idx))]); end
-if(LNOR) clear idx; idx = intersect(sa.ing, sa.inh); disp([num2str(numel(idx))]); end
-if(LSOU) clear idx; idx = intersect(sa.ing, sa.ish); disp([num2str(numel(idx))]); end
-
-clear cbt dbt cbm dbm radstd;
-cbt     = single(rad2bt(sa.fc(xc(sa.ichns)), sa.crad(:,idx)));
-dbt     = single(rad2bt(sa.fd(xd(sa.ichns)), sa.drad(:,idx)));
-cbm     = nanmean(cbt,2);
-dbm     = nanmean(dbt,2);
-radstd  = nanstd( sa.drad(:,idx) - sa.crad(:,idx), 0, 2 );
-cdbm    = 0.5*( nanmean(dbt,2) + nanmean(cbt,2) );
-  mdr   = 1E-3*( 1./drdbt(qn.wn,cdbm') );       % s.fc(xc(s.ichns))
-btstd   = mdr.*radstd';  
-stderr  = btstd'./sqrt(numel(idx));
-
-if(LDAY) day.cbm = cbm; day.dbm = dbm; day.stderr = stderr; day.btbias = cbm-dbm; 
-  day.cbt = cbt; day.dbt = dbt;  end
-if(LNIT) nit.cbm = cbm; nit.dbm = dbm; nit.stderr = stderr; nit.btbias = cbm-dbm; 
-  nit.cbt = cbt; nit.dbt = dbt;  end
-if(LNOR) nor.cbm = cbm; nor.dbm = dbm; nor.btser = btser; nor.btbias = btbias; 
-  nor.cbt = cbt; nor.dbt = dbt;  end
-if(LSOU) sou.cbm = cbm; sou.dbm = dbm; sou.btser = btser; sou.btbias = btbias; 
-  sou.cbt = cbt; sou.dbt = dbt;  end
-
-%{ 
+ 
 % ----------------- Geolocation -------------------------
  ich=402;
- figure(1);clf;simplemap(s.clat(idx),s.clon(idx),cbt(ich,:)); 
- hc = colorbar; ylabel(hc,'Kelvin')
- % aslprint([phome 'AC_jplSNO_900wn_map.png'])
- 
-% ------------------ Global Stats Spectra ----------------------
-j = igrp; wn = qn.wn;
-figure(3);clf;[hax,hl1,hl2]=plotyy(s.fc(xc(s.ichns)),cbm - dbm,s.fc(xc(s.ichns)), stderr);
-  grid on;xlim(hax(:),[bands(igrp,:)]);ylim(hax(1),[-0.3 0.6]);ylim(hax(2),[0 0.02]);
-  hax(1).YTick = [-0.4:0.1:0.6]; hax(2).YTick = [0:0.002:0.006];
-  xlabel('wavenumber cm^{-1}');ylabel(hax(1),'Mean Bias K');ya2=ylabel(hax(2),'Std. error K');
-  set(ya2, 'Units', 'Normalized', 'Position', [1.05, 0.5, 0]);
-  title('2013 IASI CrIS SNO LW Bias'); legend('bias','std. error','Location','north');
-  % aslprint([phome 'AC_jplSNO_Bias_stdErr_MW.png']);
-
+ figure(1);clf;simplemap(s.clat(iidx),s.clon(iidx),cbt(ich,:) - dbt(ich,:)); 
+   hc = colorbar; ylabel(hc,'Kelvin');title('2013 JPL AC SNO 900wn bias C-A');
+ % aslprint([phome '2013_ac_jpl_sno_900wn_bias_map.png'])
+ tdiff = s.atim - s.ctim; 
+ figure(1);clf;simplemap(s.clat(iidx),s.clon(iidx),tdiff(s.ing));hc=colorbar;
+   ylabel(hc,'Delay (secs)');title('2013 JPL AC SNO delay AIRS - CrIS');
+ % aslprint([phome '2013_ac_jpl_sno_delay_map.png'])
+   
 % ------------------ Subset Plots ----------------------- %
 j = igrp; wn = qn.wn;
 % Choose which subset to plot, mean spectra, bias and std-error.
@@ -148,27 +328,16 @@ figure(2); hold on;
   end   
  % aslprint([phome 'AC_jplSNO_Bias_stdErr_wModEdges_LW.png']);
 
-% -------- HISTOGRAMS -------
-btbins   = [180:1:320];    btcens = [180.5:1:319.5];
-% subset to small range of channels
-cchns = [399:408];  achns = [755:769];
-clear pdf_abt pdf_cbt pdf_dbt;
-for i=1:length(achns) pdf_abt(i,:) = histcounts(abt(achns(i),:), btbins); end
-for i=1:length(cchns) pdf_cbt(i,:) = histcounts(cbt(cchns(i),:), btbins); end
-for i=1:length(cchns) pdf_dbt(i,:) = histcounts(dbt(cchns(i),:), btbins); end
 
-% -------------- HISTOGRAMS: for 900 wn channel:  ----------------- %
-  ach = 759; cch = 402; 
-  pdf_a759 = histcounts(abt(ach,:),btbins);    
-  pdf_c402 = histcounts(cbt(cch,:),btbins);
-  pdf_d402 = histcounts(dbt(cch,:),btbins);
-  figure(4);clf;plot(btcens,pdf_a759,'-', btcens,pdf_c402,'-',btcens,pdf_d402,'-');grid on;
-    xlabel('Scene BT (K)');ylabel('population');    legend('AIRS','CrIS','A2C');
-    title('AIRS CrIS SNO 900wn channel population');
-  % aslprint([phome 'AC_jplSNO_900wn_population_vs_scene.png'])
+% ----------------------------------------------------------------------- %
+%                 HISTOGRAMS: for 900 wn channel:
+% ----------------------------------------------------------------------- %
+figure(2);clf;plot(btcens,pdf_abt(793,:),'-', btcens,pdf_cbt(402,:),'-',btcens, ...
+           pdf_dbt(402,:),'-'); grid on; xlim([180 340]);
+  xlabel('Scene BT (K)');ylabel('population');    legend('AIRS','CrIS','A2C');
+  title('2013 JPL AC SNO 900wn channel population');
+  % aslprint([phome '2013_ac_jpl_sno_900wn_population_vs_scene.png'])
 % day/night
-  c404d_pdf = histcounts(day.cbt(ich,:),btbins); d404d_pdf = histcounts(day.dbt(ich,:),btbins);
-  c404n_pdf = histcounts(nit.cbt(ich,:),btbins); d404n_pdf = histcounts(nit.dbt(ich,:),btbins);
   figure(2);clf;h1=subplot(2,1,1);hold on;plot(btbinx,c404d_pdf,'+-');plot(btbinx,d404d_pdf,'o-');
     grid on;legend('CrIS day','AIRS day');title('AC SNO 900wn sample pop vs scene (day night)');
     h2=subplot(2,1,2);hold on;plot(btbinx,c404n_pdf,'+-');plot(btbinx,d404n_pdf,'o-');grid on;
@@ -194,19 +363,20 @@ figure(2);clf;plot(bincen,cbinc_pdf,'+-',bincen,dbinc_pdf,'o-');grid on;xlim([29
   legend('CrIS','AIRS');title('CrIS bins, AIRS matches');xlabel('Scene BT K');
 figure(3);clf;plot(bincen,cbind_pdf,'+-',bincen,dbind_pdf,'o-');grid on;xlim([296 316])
   legend('CrIS','AIRS');title('AIRS bins, CrIS matches');xlabel('Scene BT K');
-%}
 
-
-% --------------- Quantiles Plotting --------------------- %
-ich = find(qn.wn > 900,1);     % ich = find(qn.wn > 2.4975e+03,1)  % 900wn:401 2498:128
-bincen = qn.binqa{ich};
-figure(1);clf;
-  h1=subplot(2,1,1);plot(bincen,qn.bias{ich},'k.-',bincen,1.42*qn.btser{ich},'r-',...
-   bincen,-1.42*qn.btser{ich},'r-');grid on;
-    axis([190 310 -1.2 0.3]);ylabel('d(BT) K');
-    %title('2013 AC SNO 900wn channel bias');
-  h2=subplot(2,1,2);semilogy(bincen,qn.binsz{ich});axis([190 310 100 50000]);grid on;
+% ------------------------------------------------------------------- %
+%                     Quantiles Plotting 
+% ------------------------------------------------------------------- %
+ich    = find(qnstats.wn > 900,1);     % ich = find(qn.wn > 2.4975e+03,1)  % 900wn:401 2498:128
+bincen = qnstats.binqa{ich};
+figure(3);clf;
+  h1=subplot(2,1,1);plot(bincen,qnstats.bias{ich},'.-',bincen,1.42*qnstats.btser{ich},'m-',...
+   bincen,-1.42*qnstats.btser{ich},'m-');grid on; axis([190 310 -0.8 0.3]);
+   ylabel('AIRS - CrIS dBT (K)');title('2013 JPL AC SNO 900wn bias vs scene');
+   legend('AIRS - CrIS','std. error');
+  h2=subplot(2,1,2);semilogy(bincen,qnstats.binsz{ich});axis([190 310 100 50000]);grid on;
     ylabel('population');xlabel('Scene BT (K)');
+    %aslprint([phome '2013_ac_jpl_sno_bias_900wn_vs_scene.png'])
 figure(2);clf;subplot(2,1,1)
   plot(bincen(blo(jj,1):bhi(jj,1)),btbias(jj,blo(jj,1):bhi(jj,1)));grid on;
  subplot(2,1,2);plot(bincen(blo(jj,2):bhi(jj,2)),btbias(jj,blo(jj,2):bhi(jj,2)));grid on;
@@ -269,3 +439,4 @@ figure(21);clf;hold on; for i=1:9 plot(sa.fc(sa.ichns) ,cbm(i,:)-dbm(i,:),'-'); 
   xlabel('wavenumber cm^{-1}');ylabel('d(BT) K');legend('1','2','3','4','5','6','7','8','9');
   title('2013 AC allsky SNO Mean Bias CrIS-AIRS x CrIS FOV num. 300Kbin');
   % saveas(gcf,[phome '2013_AC_SNO_Mean_Bias_by_CrIS_FOV_LW.png'],'png')
+%}
