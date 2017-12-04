@@ -1,10 +1,12 @@
 function [s] = load_sno_airs_cris_jpl_mat(sdate1, sdate2, xchns)
 
+% function s = load_sno_airs_cris_jpl_mat(sdate1, sdate2, xchns)
+%
 % Load and prep stats for all channels from a 'SMALL' SNO set (see notes below)
 %
-% INPUT: sdate1 calendar date to start collection
-%        e.g. sdate1='2013/01/01';
-%        xchns: the channels corresponding to CrIS lo-res bands w/ no guard channels.
+% INPUT: sdate1, sdate2 calendar dates to start and end collection
+%        e.g. sdate1='2013/01/01'; sdate2 = '2013/03/31';
+%        xchns: the channels corresponding to CrIS lo-res bands w/no guard channels.
 %               valid range 1:1305. or: LW: [1:713], MW: [714:1146], SW: [1157:1305]
 %     
 % OUTPUTS:
@@ -29,7 +31,7 @@ function [s] = load_sno_airs_cris_jpl_mat(sdate1, sdate2, xchns)
 %          Replaced dir() with unix(find...) which generates temporary file.
 %
 % NOTES: allow >20 GB on compute node.
-%        default end date is dlast = 2013/12/31;
+%        recommended max: up to 700 channels up to three months of SNOs.
 %
 % C Hepplewhite. November 2015.
 % CLH. Mar 2017. Update path to SNO data

@@ -71,7 +71,7 @@ cdbm     = 0.5*( nanmean(dbt,2) + nanmean(cbt,2) );
   mdr    = 1E-3*( 1./drdbt(s.fc,cdbm) );
 btstd    = mdr.*radstd;  
 stderr   = btstd./sqrt(nz);
-  whos idx cbt dbt crad drad cbm dbm radstd btstd stderr
+  whos iidx cbt dbt crad drad cbm dbm radstd btstd stderr
 
 %% ------------------------------------------------------------ %%
 

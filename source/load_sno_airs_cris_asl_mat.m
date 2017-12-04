@@ -88,7 +88,7 @@ snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c.mat'));
 ifn1 = 1;             % default start with first file unless later.
 for i=1:numel(snoLst)
   junk = regexp(snoLst(i).name,'[0-9]','match');
-  junk = cell2mat(junk);
+  junk = cell2mat(junk(1:end));                   % no. 4 appears before date
   thisdat = datenum(junk,'yyyymmdd');
   if(thisdat <= D1) ifn1 = i; end
   if(thisdat <= D2) ifn2 = i; end
@@ -132,7 +132,8 @@ load('/home/chepplew/projects/sno/airs_cris/fa2c_x.mat');     % fa2c: 1185 frm H
 [zi zj] = seq_match(sort(f2378(nig)), f2645);
   
 % Get the AIRS channels to load
-achns = [find(f2645 >= fc_ng(xchns(1)),1):find(f2645 >= fc_ng(xchns(end)),1)-1];
+%achns = [find(f2645 >= fc_ng(xchns(1)),1):find(f2645 >= fc_ng(xchns(end)),1)-1];
+achns = [1260:2162]; % use with MW band if needed: 
 cWavs  = fc_ng(cchns);
 aWavs  = f2645(achns);
 
@@ -143,7 +144,7 @@ s.tdiff = [];    s.ra = [];    s.rc = [];    s.ra2c = [];  s.cTime = [];  s.aTim
  s.aLat = [];  s.aLon = []; s.dist  = [];    s.cLat = [];   s.cLon = [];  s.csolz = [];  
 s.alnfr = []; s.clnfr = [];  s.cFov = []; s.nbr_rLW = []; s.nbr_ra = []; s.nbr_rd = [];
 
-for ifn = ifn1:1:ifn2;
+for ifn = ifn1:2:ifn2;
   vars = whos('-file',strcat(dp,snoLst(ifn).name));
   if( ismember('nbr_rLW', {vars.name}) & ismember('nbr_ra', {vars.name}) & ...
       ismember('ra2c', {vars.name})  )  %%  & ismember('nbr_ra2c', {vars.name}) ) % 
