@@ -1,4 +1,4 @@
-function [s] = load_sno_iasi_cris_asl_mat(sdate1, sdate2, xchns, src)
+function [s] = load_sno_iasi_cris_asl_mat(sdate, edate, xchns, src)
 %
 % function load_sno_iasi_cris_asl_mat() loads up radiances for a selected number
 %   of channels, specified by CrIS channel number, from the ASL SNO mat files 
@@ -7,24 +7,25 @@ function [s] = load_sno_iasi_cris_asl_mat(sdate1, sdate2, xchns, src)
 %   this function cacluates statistics during load and subsets of CrIS FOV.
 %
 % Synopsis: load_sno_iasi_cris_asl_mat('date1','date2',[chan1...chan10]);
-%           date1: first month as string: 'YYYY/MM/DD'
-%           date2: last month as string:  'YYYY/MM/DD'
+%           sdate: start date as string: 'YYYY/MM/DD'
+%           edate: end date as string:   'YYYY/MM/DD'
 %           N.B. Only accepts the same year.
 %           xchns: numeric IDs of CrIS channels to load based on NO guard channel list. 
 %           (max 10).
 %           eg [403 499 737 884 905 998 1021 1297] or [566:824]; 
 %              LW: [1:717], MW:[718:1154], SW:[1155:1317];
-%           [   1:1269] (645  - 1100) cm-1
-%           [1270:2160] (1100 - 1615) cm-1
+%                  [1:1269] (645  - 1100) cm-1
+%                  [1270:2160] (1100 - 1615) cm-1
+%           src:  [M1, M2]. mission numbers: iasi-1 or iasi-2 (MetOp-A or -B) 
+%                 and cris-1 or cris-2 (NPP or JPSS-1), 
 %
 % Output:  Two structures of arrays. 
-%             s: the SNO single fields.
+%             s: the SNO geo, time and related vector fields.
 %             a: whole spectrum averages and first moment.
 %
 %
-% Notes: If the selected channel is associated with a bad AIRS channel or has been
-%        modified by AIRS L1C (clean and fill) then the next nearest good channel
-%        is substituted.
+% Notes: 
+%        The CrIS CCAST spectral resolution is hard-wired for LR (low-res).
 %        The IASI spectra are apodized.
 %
 % Dependencies: i) nominal IASI and CrIS w/2 guard channels per edge frequency grids.
@@ -56,13 +57,26 @@ junk = [-5:.05:5]; y0 = normpdf(junk,0,1); yp = cumsum(y0)./20.0; clear junk y0;
 % Choose which profiler to use (goes in prf)
 s.prf  = yp;
 
+% Check number of input arguments
+if(nargin ~= 4) error('Please enter all 4 input arguments'); return; end
+
+% Check mission numbers
+if(length(src) ~=2) error('Need IASI and CRIS mission numbers'); return; end
+junk = ismember(src,[1,2]);
+if(~all(junk)) error('Mission numbers can only be 1 or 2 for now'); return; end
+disp(['you have selected IASI-' num2str(src(1)) ' and CRIS-' num2str(src(2))]);
+if(src(1) == 1) IX = '';  end
+if(src(1) == 2) IX = '2'; end
+if(src(2) == 1) CX = '';  end
+if(src(2) == 2) CX = '2'; end
+
 % Process and check the date strings
 posYrs = [2002:2017];
 posMns = [1:12];
-whos sdate1; disp([sdate1 ' to ' sdate2]); fprintf('\n');
+whos sdate; disp([sdate ' to ' edate]); fprintf('\n');
 try 
-   D1 = datenum(sdate1,'yyyy/mm/dd');
-   D2 = datenum(sdate2,'yyyy/mm/dd');
+   D1 = datenum(sdate,'yyyy/mm/dd');
+   D2 = datenum(edate,'yyyy/mm/dd');
 catch
    error('Incorrect Date Format')
    return
@@ -71,13 +85,13 @@ s.dtime1 = datetime(D1,'convertFrom','datenum');
 [nYr1 nMn1 nDy1] = datevec(D1);
 [nYr2 nMn2 nDy2] = datevec(D2);
 if(nYr1 ~= nYr2) error('Use same year only'); return; end
-cYr1   = sdate1(1:4);     cMn1 = sdate1(6:7);     cDy1 = sdate1(9:10);
-cYr2   = sdate2(1:4);     cMn1 = sdate2(6:7);     cDy1 = sdate2(9:10);
+cYr1   = sdate(1:4);     cMn1 = sdate(6:7);     cDy1 = sdate(9:10);
+cYr2   = edate(1:4);     cMn1 = edate(6:7);     cDy1 = edate(9:10);
 
   junk = sprintf('%4d/%02d/%02d',nYr1-1,12,31);
-jdy1   = datenum(sdate1)-datenum(junk);  clear junk;           % needed for data directory
+jdy1   = datenum(sdate)-datenum(junk);  clear junk;           % needed for data directory
   junk = sprintf('%4d/%02d/%02d',nYr2-1,12,31);
-jdy2   = datenum(sdate2)-datenum(junk);  clear junk;           % needed for data directory
+jdy2   = datenum(edate)-datenum(junk);  clear junk;           % needed for data directory
 
 % Check channel numbers entered correctly
 if(length(xchns) > 20 || length(xchns) < 1 ) fprintf(1,'Wrong number channels\n'); end
@@ -88,14 +102,15 @@ load('/home/chepplew/projects/iasi/f_iasi.mat');               % f_iasi [8641 x 
 load('/home/chepplew/projects/cris/cris_freq_2grd.mat'); fc = vchan;
 
 % Get over-lapping IASI channels
-[zi ichns] = seq_match(fc(xchns),f_iasi);
+%[zi ichns] = seq_match(fc(xchns),f_iasi);
+ichns = [find(f_iasi >= fc(xchns(1)),1): find(f_iasi >= fc(xchns(end)),1)]; 
 cchns = xchns;
    
 % ************* load up SNO data ********************
 
-dp = ['/home/chepplew/data/sno/iasi_cris/LR/' cYr1 '/'];
+dp     = ['/home/chepplew/data/sno/iasi' IX '_cris' CX '/LR/' cYr1 '/'];
 snoLst = dir(strcat(dp, 'sno_iasi_cris_asl_*.mat'));
-fprintf(1,'Found %d total SNO files\n',numel(snoLst));
+fprintf(1,'Found %d total SNO files in %s\n',numel(snoLst), dp);
 
 %{
 % subset range by date as requested:
@@ -115,7 +130,7 @@ fprintf(1,'Processing SNO files from: %s to %s\n',snoLst(ifn1).name(21:28), ...
 %%%%%%%%%
 s.tdiff = [];    s.rc = [];    s.ri = [];      s.rd = [];  s.itime = [];  s.ctime = []; 
  s.clat = [];  s.clon = []; s.dist  = [];    s.ilat = [];   s.ilon = [];  s.csolz = [];  
-s.iqual = []; s.clnfr = [];  s.ifov = [];    s.cfov = [];
+s.iqual = []; s.clnfr = [];  s.ifov = [];    s.cfov = []; s.prcver = [];
 
 for ifn = 1:numel(snoLst)  % ifn1:ifn2;
   vars = whos('-file',strcat(dp,snoLst(ifn).name));
@@ -136,6 +151,7 @@ for ifn = 1:numel(snoLst)  % ifn1:ifn2;
       s.csolz   = [s.csolz; g.csolzen];
       s.tdiff   = [s.tdiff; g.tdiff];                       %
       s.dist    = [s.dist;  g.dist];
+      %s.prcver  = [s.prcver; g.process_version];
       %s.alnfr   = [s.alnfr; sno.alandfr];
       %s.l1cr    = [s.l1cr, g.l1cReason'];
       %s.l1cp    = [s.l1cp, g.l1cProc'];

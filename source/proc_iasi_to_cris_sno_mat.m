@@ -1,14 +1,17 @@
-function proc_iasi_to_cris_sno_mat()
+function proc_iasi_to_cris_sno_mat(CRIS,AIRS)
 
 % Takes IASI spectral observations from {IASI CrIS} or {AIRS IASI} SNO files obtained from JPL
 %   converts then to the CrIS grid and saves them back to the original SNO
 %   file.
 %
-% set CRIS and AIRS to either 0,1. to use the paired sensor with IASI.
+% set CRIS and AIRS to either logical 0,1. for the paired sensor.
+% e.g. CRIS=true(1); AIRS=false(1); then call the proc.
 
 % C Hepplewhite
 %
 % version 1: Nov 2015.
+% 2-Jan-2018 CLH. Added logical paramaters cor CrIS and AIRS.
+%
 
 cd /home/chepplew/gitLib/asl_sno/run
 
@@ -22,7 +25,7 @@ load('/asl/data/iremis/danz/iasi_f.mat');                      % fiasi [8461x1]
 xx=load('cris_freq_2grd.mat');  fcris = xx.vchan; clear xx;    % 1317 chns (12 guard chans)
 
 if(CRIS)
-  dp    = '/asl/s1/chepplew/data/sno/iasi_cris/LR/2017/';
+  dp    = '/asl/s1/chepplew/data/sno/iasi2_cris/LR/2017/';
   fpatt = '''sno_iasi_cris*.mat''';               % 3x' required to include ' in the variable
 end
 if(AIRS)
@@ -50,7 +53,7 @@ opt1.hapod   = 0;  % 1;                            % no hamming gives better res
 opt1.resmode = 'lowres';
 opt1.nguard  = 2;                                  % 2 guard channels per band edge.
 
-for ifn = 1:numel(ccs)
+for ifn = 150:numel(ccs)
   g = load(strcat(dp,ccs{ifn}));
   if(numel(g.ilat) > 2)
     if(~isfield(g, 'i2rc'))

@@ -1,46 +1,49 @@
-% plot_sno_airs_cris_asl_mat.m
+% plot_sno_iasi_cris_asl_mat.m
 
-% first run:  [s] = load_sno_airs_cris_asl_mat(sdate1, sdate2, xchns, src);
-
+% first run:  [s] = load_sno_iasi_cris_asl_mat(sdate, edate, xchns, src);
+% currently no neighbour FOVs
+% Manual edits required for which missions (IASAI-1,2 CrIS-1,2) and resolution.
+%
 % plot options
 
-phome = '/home/chepplew/projects/sno/airs_cris/LR/figs/';
-hamm = 1;
+phome = '/home/chepplew/projects/sno/iasi_cris/LR/figs/';
+hamm  = 1;
+
 % --------------- convert to BT ----------------------------
-abt      = real(rad2bt(s.fa(s.achns), s.ra(:,s.ig)));
-if hamm
-   junk  = hamm_app(double(s.rc(:,s.ig)));
-   cbt   = real(rad2bt(s.fc(s.cchns), junk));
-   junk  = hamm_app(double(s.ra2c(:,s.ig)));
-   dbt   = real(rad2bt(s.fd(s.dchns), junk));
+if hamm 
+  junk = hamm_app(double(s.rd(:,s.iok))); 
+  dbt  = real(rad2bt(s.fd(s.dchns), junk)); clear junk;
+  junk = hamm_app(double(s.rc(:,s.iok)));
+  cbt  = real(rad2bt(s.fc(s.cchns), junk)); clear junk; 
 else
-  cbt      = real(rad2bt(s.fc(s.cchns), s.rc(:,s.ig)));
-  dbt      = real(rad2bt(s.fd(s.dchns), s.ra2c(:,s.ig)));
+  dbt      = real(rad2bt(s.fd(s.dchns), s.rd(:,s.iok)));
+  cbt      = real(rad2bt(s.fc(s.cchns), s.rc(:,s.iok)));
 end
-nbr_cbt  = real(rad2bt(s.fc, s.nbr_rLW(:,:,ig)));     clear junk;
-nbr_abt  = real(rad2bt(s.fa(s.achns), s.nbr_ra(:,:,ig)));
-nbr_dbt  = real(rad2bt(s.fd(s.dchns), s.nbr_rd(:,:,ig)));
+ibt      = real(rad2bt(s.fi(s.ichns), s.ri(:,s.iok)));
+%nbr_cbt  = real(rad2bt(s.fc(s.cchns), s.nbr_rLW(:,:,s.iok)));
+%nbr_ibt  = real(rad2bt(s.fi(s.ichns), s.nbr_ri(:,:,s.iok)));
+%nbr_dbt  = real(rad2bt(s.fd(s.dchns), s.nbr_rd(:,:,s.iok)));
 % ---------------- Basic Stats ------------------------------
 btbias   = dbt - cbt;
- whos abt cbt dbt nbr_abt nbr_cbt nbr_dbt btbias
-abm      = nanmean(abt,2);
+ whos ibt cbt dbt nbr_abt nbr_cbt nbr_dbt btbias
+ibm      = nanmean(ibt,2);
 cbm      = nanmean(cbt,2);
 dbm      = nanmean(dbt,2);
 bias_mn  = nanmean(cbt - dbt,2);
 bias_sd  = nanstd(cbt - dbt, 0,2);
-radstd   = nanstd( s.rd(:,s.ig) - s.rc(:,s.ig),0,2 );
+
+radstd   = nanstd( s.rd(:,s.iok) - s.rc(:,s.iok),0,2 ); 
  cdbm    = 0.5*( nanmean(dbt,2) + nanmean(cbt,2) );
  mdr     = 1E-3*( 1./drdbt(s.fd(s.dchns),cdbm) );
-btstd    = mdr.*radstd;
+btstd    = mdr.*radstd;  
 btser    = btstd./sqrt(size(cbt,2));
-
-nbr_cbm  = nanmean(nbr_cbt,3);
-nbr_abm  = nanmean(nbr_abt,3);
-nbr_dbm  = nanmean(nbr_dbt,3);
-nbr_cbsd = nanstd(nbr_cbt,0,3);                     % global std.dev
-nbr_absd = nanstd(nbr_abt,0,3);
-nbr_dbsd = nanstd(nbr_dbt,0,3);
- whos abm cbm dbm bias_mn bias_sd btser nbr_abm nbr_cbm nbr_dbm nbr_cbsd nbr_absd nbr_dbsd
+%nbr_cbm  = nanmean(nbr_cbt,3);
+%nbr_ibm  = nanmean(nbr_ibt,3);
+%nbr_dbm  = nanmean(nbr_dbt,3);
+%nbr_cbsd = nanstd(nbr_cbt,0,3);                     % global std.dev
+%nbr_absd = nanstd(nbr_abt,0,3);
+%nbr_dbsd = nanstd(nbr_dbt,0,3);
+ whos ibm cbm dbm bias_mn bias_sd nbr_abm nbr_cbm nbr_dbm nbr_cbsd nbr_absd nbr_dbsd
 
 % --------------- neighbour stats at SNOs ----------------------------
 
@@ -78,7 +81,7 @@ sim_abt  = real(rad2bt(s.fc(s.cchns), sim_ra(:,ig)));
 % --------------------- full set PDFs --------------------------
 btbins  = [190.0: 1.0: 330]; btcens = [190.5: 1.0: 329.5];
 for i=1:size(cbt,1) pdf_cbt(i,:) = histcounts(cbt(i,:), btbins); end
-for i=1:size(abt,1) pdf_abt(i,:) = histcounts(abt(i,:), btbins); end
+for i=1:size(ibt,1) pdf_ibt(i,:) = histcounts(ibt(i,:), btbins); end
 for i=1:size(dbt,1) pdf_dbt(i,:) = histcounts(dbt(i,:), btbins); end
 for i=1:size(nbr_cbt,1) pdf_nbr_cbt(i,:) = histcounts(nbr_cbt(i,:), btbins); end
 for i=1:size(nbr_abt,1) pdf_nbr_abt(i,:) = histcounts(nbr_abt(i,:), btbins); end
@@ -183,47 +186,32 @@ figure(5);clf;semilogy(btcens, pdf_dbt_bin290(ich,:),'.-', btcens, pdf_cbt_bin29
 figure(6);clf;semilogy(btcens, pdf_nbr_cbt_bin304(ich,:),'.-');xlim([275 315]);grid on;hold on;
   semilogy(btcens, pdf_nbr_cbt_bin290(ich,:),'.-')
 
-% -------------------- SUBSET by CrIS FOV ------------------------
-clear xFOV nFOV fov;
-for i=1:9 xFOV{i} = find(s.cFov == i); end
-for i = 1:9 nFOV(i) = numel(xFOV{i}); end
-for i=1:9
-  fov(i).cbt = rad2bt(s.fc(s.cchns), s.rc(:, xFOV{i}));
-  fov(i).dbt = real(rad2bt(s.fd(s.dchns), s.ra2c(:, xFOV{i})));
-end
-%
-btbins  = [190.0: 1.0: 330]; btcens = [190.5: 1.0: 329.5];
-clear pdf;
-for i=1:9
-  for j=1:length(s.cchns) pdf(i).cbt(j,:) = histcounts(fov(i).cbt(j,:), btbins); end
-end
-
-for i=1:9
-  fov(i).mbias = nanmean(fov(i).cbt - fov(i).dbt, 2);
-end
 % ----------------------------------------------------------------
 %                     PLOTTING SECTION 
 % ----------------------------------------------------------------
 %
-figure(1);clf;plot(s.fa,abm,'-',s.fc,cbm,'-',s.fa2c,dbm,'-');
-  grid on;legend('AIRS','CrIS','A2C','Location','southEast');
+figure(1);clf;plot(s.fi(s.ichns),ibm,'-',s.fc(s.cchns),cbm,'-',s.fd(s.dchns),dbm,'-');
+  grid on;legend('IASI','CrIS','I2C','Location','southEast');
+  xlabel('wavenumber cm^{-1}');ylabel('B.T. (K)');title('');
+  %saveas(gcf,[phome '2017_iasi2_cris1_mean_bt_lw_spectrum.png'],'png')
 % ------------ Maps ----------------------
-figure(1);clf;simplemap(s.cLat, s.cLon, s.tdiff*24*60);title('Delay AIRS-CrIS mins');
-figure(1);clf;simplemap(s.cLat, s.cLon, s.dist); title('Separation deg');
-ich = 16;
-figure(1);clf;simplemap(s.cLat(s.ig), s.cLon(s.ig), cbt(ich,:)');title('CrIS BT (K)');
-figure(1);clf;simplemap(s.cLat(s.ig), s.cLon(s.ig), (dbt(dch,:) - cbt(cch,:))');
-hcb = colorbar; ylabel(hcb,'900 cm^{-1} dBT (K)');
-  title('2018d005 A:C2 SNO Bias AIRS - CrIS-2 (K)');
+figure(2);clf;simplemap(s.clat, s.clon, s.tdiff*24*60);title('Delay IASI-CrIS mins');
+figure(2);clf;simplemap(s.clat, s.clon, s.dist); title('Separation deg');
+ich = 404;   % find(s.fc(s.cchns) >900,1)
+figure(2);clf;simplemap(s.clat(s.iok), s.clon(s.iok), cbt(ich,:)');title('CrIS BT (K)');
+figure(2);clf;simplemap(s.clat(s.iok), s.clon(s.iok), (dbt(ich,:) - cbt(ich,:))');
+  title('900wn Bias IASI - CrIS (K)');
 
 % ------------ Histograms -----------------
-ach = find(s.fa>900,1); cch = find(s.fc>900,1); dch = find(s.fa2c>900,1);
+ich = find(s.fi(s.ichns)>900,1); cch = find(s.fc(s.cchns)>900,1); 
+dch = find(s.fd(s.dchns)>900,1);
 pc_diff_pdf = 100.*(pdf_cbt - pdf_abt)./pdf_cbt;
-figure(2);clf;plot(btcens,pdf_cbt(cch,:),'.-', btcens,pdf_dbt(dch,:),'.-',...
-      btcens,pdf_abt(ach,:),'-'); grid on;xlim([190 330]);
-   xlabel('Scene BT bin (K)');ylabel('Number in bin');title('2013 ASL A:C SNO 900 cm^{-1} channel')
-   legend('CrIS','AIRS2CrIS','AIRS')
-
+figure(3);clf;plot(btcens,pdf_cbt(cch,:),'.-', btcens,pdf_dbt(dch,:),'.-',...
+      btcens,pdf_ibt(ich,:),'-'); grid on;xlim([190 310]);
+   xlabel('Scene BT bin (K)');ylabel('Number in bin');legend('CrIS','IASI2CrIS','IASI');
+   title('2017 ASL I2:C1 SNO 900 cm^{-1} channel')
+  %saveas(gcf,[phome '2017_i2c1_sno_900wn_pdf.png'],'png')
+   
 figure(2);clf;
  h1=subplot(2,1,1);plot(btcens,pdf_cbt(cch,:),'.-', btcens,pdf_dbt(dch,:),'.-'); grid on;
  title('Obs count by 900cm-1 temp. bin');axis([200 330 0 Inf]);
@@ -237,10 +225,8 @@ figure(2);clf;plot(btcens, 0.25*pdf_nbr_cbt(ich,:),'.-', btcens, pdf_cbt(ich,:),
 figure(2);clf;plot(btcens, 0.50*pdf_nbr_abt(ich,:),'.-', btcens, pdf_abt(ich,:),'.-');
 figure(2);clf;plot(btcens, 0.50*pdf_nbr_dbt(ich,:),'.-', btcens, pdf_dbt(ich,:),'.-');
 
-figure(3);clf;plot(biascens, pdf_bias(cch,:), '.-');grid on;
-  xlabel('bin BT (K)');ylabel('population');legend('900 cm^{-1}');
-  title('2018d005 AIRS:CrIS-2 SNO bias hist');
-  
+figure(3);clf;plot(biascens, pdf_bias(ich,:), '.-');grid on;
+
 % ------------ fractional PDF differences --------------
 pc_diff_nbr = 100.*(pdf_nbr_cbt - pdf_nbr_abt)./pdf_nbr_cbt;
 figure(2);clf;
@@ -256,16 +242,13 @@ figure(2);clf;plot(btcens, (pdf_sim_cbt(4,:) - pdf_cbt(4,:))./pdf_cbt(4,:),'.-')
    xlim([200 330]); grid on; legend('CrIS','AIRS');
    title('Fraction difference AIRS and CrIS neighbors vs SNO'); 
 
-% ------------ Simple Bias Stats -------------------------
-figure(2);cla;plot(s.fa2c,bias_mn,'-');
-%
-figure(3);clf;plot(s.fc(s.cchns),bias_mn,'-', s.fc(s.cchns),10*btser,'-');
-  axis([645 1100 -0.8 0.8]);grid on;legend('CrIS - AIRS','10*std.err.');
-  xlabel('wavenumber cm^{-1}');ylabel('CrIS-2 minus AIRS (K)');
-  title('2018d005 A:C2 SNO mean bias LW');
-  %saveas(gcf,[phome '2018d005_ac2_sno_mean_bias_stderr_lw.png'],'png');
-
-
+% ------------ Basic Stats -------------------------
+figure(1);clf;plot(s.fc(s.cchns),bias_mn,'-', s.fc(s.cchns),btser,'-');
+  axis([645 1100 -0.8 0.8]);grid on;legend('CrIS - IASI','std.err.');
+  xlabel('wavenumber cm^{-1}');ylabel('CrIS minus IASI (K)');
+  title('2017 I2:C1 SNO mean bias LW'); 
+  %saveas(gcf,[phome '2017_i2c1_sno_mean_bias_stderr_lw.png'],'png');
+  
 % choose hot subset (or no subset here)
  idx = ':';  % idx = uHot305;
  junk = squeeze(nbr_cbt(4,idx,:));
@@ -311,4 +294,5 @@ figure(1);clf;simplemap(s.cLat(uHot305), s.cLon(uHot305), dbt(uHot305)');
 %mdr   = 1E-3*(1./drdbt(fd,btm') );
 %drse  = sqrt((a.gddrs.^2 + a.gcdrs.^2))/sqrt(sum(a.nSam));
 %dbse  = mdr.*drse';
+    bias_mn  = nanmean(cbt - dbt,2);
 

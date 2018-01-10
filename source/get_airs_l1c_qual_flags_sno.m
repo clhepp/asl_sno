@@ -1,10 +1,18 @@
-function [] = get_airs_l1c_qual_flags_sno(sdate)
+function [xt] = get_airs_l1c_qual_flags_sno(sdate)
 %
-% function [] = get_airs_l1c_qual_flags_sno(sdate)
+% function [xt] = get_airs_l1c_qual_flags_sno(sdate)
+%
+% counts the number of times each of the 'good AIRS l1b channels' has been
+%  modified by the L1C processor, taken from a day of AIRS:CRIS SNOs.
 %
 % INPUT: date. string format: 'yyyy/MM/dd'
 %
+% OUTPUT: structure xt, with fields:
+%         tally [1 x 1842] double. actual sample count.
+%         pc:    percent of samples modified.
+%         ns:    total number of samples. 
 %
+% Notes:
 % L1cProc:
 % Zero means the channel was unchanged in Level-1C.;
 % Bit 7 (MSB, value 128): This is a synthesized fill channel where the AIRS instrument 
@@ -71,17 +79,25 @@ ifn = 1;
 g = load([ad(ifn).folder,'/',ad(ifn).name],'l1cProc','l1cSynthReason');
 
 % count the occurances of modified values
-tally = [];
+xt = struct;
+xt.tally = [];
+xt.ns    = size(g.l1cProc,2);
 for i = 1:length(xj)
-  tally(i) = length(find(g.l1cProc(i,:) ~=0 ));
+  xt.tally(i) = length(find(g.l1cProc(xj(i),:) ~=0 ));
+  xt.pc(i)    = 100 - 100.*(xt.ns - xt.tally(i))/xt.ns;
 end
 
+%{
 % Some plots
-figure(1);clf;imagesc([1:1972],fairs(xj(426:500)),g.l1cProc(xj(426:500),:))
-  xlabel('sample no.');ylabel('wavenumber cm^{-1}');title('2017d001 AC SNO AIRS l1cProc');
-  saveas(gcf,[phome '2017d001_ac_hr_l1cproc_sample.png'],'png')  
-figure(1);clf;pcolor([1:1972], fairs(xj(426:500)),g.l1cProc(xj(426:500),:) )
-  shading flat 
-% check alignment of good channels between the 2378 and 2645 grids
-figure(2);clf;plot([1:1842],sort(f(kg(xi))),'.', [1:1842],fairs(xj),'o') 
+%figure(1);clf;imagesc([1:1972],fairs(xj(426:500)),g.l1cProc(xj(426:500),:))
+%  xlabel('sample no.');ylabel('wavenumber cm^{-1}');title('2017d001 AC SNO AIRS l1cProc');
+%  saveas(gcf,[phome '2017d001_ac_hr_l1cproc_sample.png'],'png')  
+figure(1);clf;pcolor([1:1972], fairs(xj(426:500)),g.l1cProc(xj(426:500),:) ); shading flat
+   xlabel('sample no.');ylabel('wavenumber cm^{-1}');title('2017d001 AC SNO AIRS l1cProc');
   
+% check alignment of good channels between the 2378 and 2645 grids
+% figure(2);clf;plot([1:1842],sort(f(kg(xi))),'.', [1:1842],fairs(xj),'o') 
+ figure(2);clf;plot(fairs(xj),xt.pc,'d','MarkerFaceColor','b');
+   xlabel('wavenumber cm^{-1}'); grid on;
+   ylabel('Percent Changed by L1C');title('AIRS good chans L1C modification count');
+%}
