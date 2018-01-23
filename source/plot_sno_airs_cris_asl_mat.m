@@ -4,25 +4,30 @@
 
 % plot options
 
+s.rd = s.ra2c;
+fa   = s.fa(s.achns);
+fc   = s.fc(s.cchns);
+fd   = s.fd(s.dchns);
+
 phome = '/home/chepplew/projects/sno/airs_cris/LR/figs/';
 hamm = 1;
 % --------------- convert to BT ----------------------------
-abt      = real(rad2bt(s.fa(s.achns), s.ra(:,s.ig)));
+abt      = real(rad2bt(fa, s.ra(:,s.ig)));
 if hamm
    junk  = hamm_app(double(s.rc(:,s.ig)));
-   cbt   = real(rad2bt(s.fc(s.cchns), junk));
+   cbt   = real(rad2bt(fc, junk));
    junk  = hamm_app(double(s.ra2c(:,s.ig)));
-   dbt   = real(rad2bt(s.fd(s.dchns), junk));
+   dbt   = real(rad2bt(fd, junk));
 else
-  cbt      = real(rad2bt(s.fc(s.cchns), s.rc(:,s.ig)));
-  dbt      = real(rad2bt(s.fd(s.dchns), s.ra2c(:,s.ig)));
+  cbt      = real(rad2bt(fc, s.rc(:,s.ig)));
+  dbt      = real(rad2bt(fd, s.ra2c(:,s.ig)));
 end
-nbr_cbt  = real(rad2bt(s.fc, s.nbr_rLW(:,:,ig)));     clear junk;
-nbr_abt  = real(rad2bt(s.fa(s.achns), s.nbr_ra(:,:,ig)));
-nbr_dbt  = real(rad2bt(s.fd(s.dchns), s.nbr_rd(:,:,ig)));
+nbr_cbt  = real(rad2bt(fc, s.nbr_rLW(:,:,ig)));     clear junk;
+nbr_abt  = real(rad2bt(fa, s.nbr_ra(:,:,ig)));
+nbr_dbt  = real(rad2bt(fd, s.nbr_rd(:,:,ig)));
 % ---------------- Basic Stats ------------------------------
 btbias   = dbt - cbt;
- whos abt cbt dbt nbr_abt nbr_cbt nbr_dbt btbias
+ % whos abt cbt dbt nbr_abt nbr_cbt nbr_dbt btbias
 abm      = nanmean(abt,2);
 cbm      = nanmean(cbt,2);
 dbm      = nanmean(dbt,2);
@@ -30,7 +35,7 @@ bias_mn  = nanmean(cbt - dbt,2);
 bias_sd  = nanstd(cbt - dbt, 0,2);
 radstd   = nanstd( s.rd(:,s.ig) - s.rc(:,s.ig),0,2 );
  cdbm    = 0.5*( nanmean(dbt,2) + nanmean(cbt,2) );
- mdr     = 1E-3*( 1./drdbt(s.fd(s.dchns),cdbm) );
+ mdr     = 1E-3*( 1./drdbt(fd,cdbm) );
 btstd    = mdr.*radstd;
 btser    = btstd./sqrt(size(cbt,2));
 
@@ -131,16 +136,16 @@ for jj = 1:numel(s.cchns)
   for i = 1:length(dbin)
     binsz(jj,i)   = length(ubinInd{i});
     btbias(jj,i)  = nanmean( xbt(jj,ubinInd{i}) - cbt(jj,ubinInd{i}) );
-    radstd(jj,i)  = nanstd( xra(jj,ig(ubinInd{i})) - s.rc(jj,ig(ubinInd{i})) );   % s.rc
+    radstd(jj,i)  = nanstd( xra(jj,s.ig(ubinInd{i})) - s.rc(jj,s.ig(ubinInd{i})) );   % s.rc
     cdbm(i)    = 0.5*( nanmean(xbt(jj,ubinInd{i})) + nanmean(cbt(jj,ubinInd{i})) );
-      mdr      = 1E-3*( 1./drdbt(s.fd(s.dchns(jj)),cdbm(i)) );
+      mdr      = 1E-3*( 1./drdbt(fd(jj),cdbm(i)) );
     btstd(jj,i)   = mdr.*radstd(jj,i);  
     btser(jj,i)   = btstd(jj,i)./sqrt(binsz(jj,i));
     %%bias250(jj,i) = btbias(jj,i)./drd250(jj);                 % option hard wired
   end
   jtot  = sum(binsz(jj,:));
-  jmdr  = 1E-3*( 1./drdbt(s.fd(s.dchns(jj)),cbm(jj)) );
-  jbtse = jmdr.* nanstd(xra(jj,ig) - s.rc(jj,ig),1,2) / sqrt(jtot);   % s.rc
+  jmdr  = 1E-3*( 1./drdbt(fd(jj),cbm(jj)) );
+  jbtse = jmdr.* nanstd(xra(jj,s.ig) - s.rc(jj,s.ig),1,2) / sqrt(jtot);   % s.rc
   fprintf(1,'.');
 end
 fprintf(1,'\n');
@@ -183,7 +188,9 @@ figure(5);clf;semilogy(btcens, pdf_dbt_bin290(ich,:),'.-', btcens, pdf_cbt_bin29
 figure(6);clf;semilogy(btcens, pdf_nbr_cbt_bin304(ich,:),'.-');xlim([275 315]);grid on;hold on;
   semilogy(btcens, pdf_nbr_cbt_bin290(ich,:),'.-')
 
-% -------------------- SUBSET by CrIS FOV ------------------------
+% ----------------------------------------------------------------------
+%                   SUBSET by CrIS FOV 
+% ----------------------------------------------------------------------
 clear xFOV nFOV fov;
 for i=1:9 xFOV{i} = find(s.cFov == i); end
 for i = 1:9 nFOV(i) = numel(xFOV{i}); end
@@ -201,11 +208,46 @@ end
 for i=1:9
   fov(i).mbias = nanmean(fov(i).cbt - fov(i).dbt, 2);
 end
+
+%  -------- Quantile Analysis ---------
+for i=1:9
+  qn_c = quantile(fov(i).cbt,s.prf,2);
+  qn_d = quantile(fov(i).dbt,s.prf,2);
+  fov(i).qn = qn_c; % (qn_c + qn_d)/2.0;
+end
+disp('computing quantiles for each FOV - will take a while!')
+for i=1:9 fov(i).binsz = []; fov(i).btbias = []; fov(i).btstd = []; fov(i).btser = []; end
+for i=1:9
+  xrd = s.rd(:,xFOV{i});
+  xrc = s.rc(:,xFOV{i});
+for j = 1:size(cbt,1)
+  sbins = fov(i).qn(j,:);
+  [dbin dbinStd dbinN dbinInd] = ...
+      Math_bin(fov(i).dbt(j,:),fov(i).cbt(j,:) - fov(i).dbt(j,:),sbins); 
+  [cbin cbinStd cbinN cbinInd] = ...
+      Math_bin(fov(i).cbt(j,:),fov(i).cbt(j,:) - fov(i).dbt(j,:),sbins);
+  for k = 1:length(dbin)                                                       
+    ubinInd(k,:) = {union(dbinInd{k},cbinInd{k})};                  
+    fov(i).binsz(j,k)  = length(ubinInd{k});
+    fov(i).btbias(j,k) = nanmean(fov(i).dbt(j,ubinInd{k}) - fov(i).cbt(j,ubinInd{k}) );
+
+    radstd  = nanstd( xrd(j,ubinInd{k}) - xrc(j,ubinInd{k}) );   % s.rc
+    cdbm    = 0.5*( nanmean(fov(i).dbt(j,ubinInd{k})) + ...
+                    nanmean(fov(i).cbt(j,ubinInd{k})) );
+      mdr      = 1E-3*( 1./drdbt(fd(j),cdbm) );
+    fov(i).btstd(j,k)   = mdr.*radstd;  
+    fov(i).btser(j,k)   = fov(i).btstd(j,k)./sqrt(fov(i).binsz(j,k));
+
+  end
+end
+fprintf(1,'.')
+end
+
 % ----------------------------------------------------------------
 %                     PLOTTING SECTION 
 % ----------------------------------------------------------------
 %
-figure(1);clf;plot(s.fa,abm,'-',s.fc,cbm,'-',s.fa2c,dbm,'-');
+figure(1);clf;plot(fa,abm,'-',fc,cbm,'-',fd,dbm,'-');
   grid on;legend('AIRS','CrIS','A2C','Location','southEast');
 % ------------ Maps ----------------------
 figure(1);clf;simplemap(s.cLat, s.cLon, s.tdiff*24*60);title('Delay AIRS-CrIS mins');
@@ -217,7 +259,7 @@ hcb = colorbar; ylabel(hcb,'900 cm^{-1} dBT (K)');
   title('2018d005 A:C2 SNO Bias AIRS - CrIS-2 (K)');
 
 % ------------ Histograms -----------------
-ach = find(s.fa>900,1); cch = find(s.fc>900,1); dch = find(s.fa2c>900,1);
+ach = find(fa>900,1); cch = find(fc>900,1); dch = find(fd>900,1);
 pc_diff_pdf = 100.*(pdf_cbt - pdf_abt)./pdf_cbt;
 figure(2);clf;plot(btcens,pdf_cbt(cch,:),'.-', btcens,pdf_dbt(dch,:),'.-',...
       btcens,pdf_abt(ach,:),'-'); grid on;xlim([190 330]);
@@ -257,9 +299,9 @@ figure(2);clf;plot(btcens, (pdf_sim_cbt(4,:) - pdf_cbt(4,:))./pdf_cbt(4,:),'.-')
    title('Fraction difference AIRS and CrIS neighbors vs SNO'); 
 
 % ------------ Simple Bias Stats -------------------------
-figure(2);cla;plot(s.fa2c,bias_mn,'-');
+figure(2);cla;plot(s.fd,bias_mn,'-');
 %
-figure(3);clf;plot(s.fc(s.cchns),bias_mn,'-', s.fc(s.cchns),10*btser,'-');
+figure(3);clf;plot(fc,bias_mn,'-', fc,10*btser,'-');
   axis([645 1100 -0.8 0.8]);grid on;legend('CrIS - AIRS','10*std.err.');
   xlabel('wavenumber cm^{-1}');ylabel('CrIS-2 minus AIRS (K)');
   title('2018d005 A:C2 SNO mean bias LW');
@@ -285,7 +327,7 @@ pdf_sno3  = histcounts(cbt(4,uHot305), btbins);
 clear pdf_*
 
 % -------------------------- quantiles --------------------------- %
-ich = 12;   % or 16
+ich = find(fc > 900,1); % LW(713) = 402;   % or 16
 figure(4);clf;h1=subplot(2,1,1);plot(qsBins(ich,1:end-1), btbias(ich,:), '.-');grid on;
   axis([190 330 -1 0.3]);title('2013 ASL AC SNO 902 wn Bias'); ylabel('AIRS - CrIS K')
   h2=subplot(2,1,2);semilogy(qsBins(ich,1:end-1), cbinN,'-');grid on;xlim([190 330]);

@@ -60,6 +60,12 @@ s.prf  = yp;
 % Check number of input arguments
 if(nargin ~= 4) error('Please enter all 4 input arguments'); return; end
 
+% Check CrIS resolution (high or low)
+cris_res='high';
+cris_res = upper(cris_res);
+if(strcmp(cris_res,'HIGH')) CR='HR'; ncc=2223; end
+if(strcmp(cris_res,'LOW'))  CR='LR'; ncc=1317; end
+
 % Check mission numbers
 if(length(src) ~=2) error('Need IASI and CRIS mission numbers'); return; end
 junk = ismember(src,[1,2]);
@@ -71,7 +77,7 @@ if(src(2) == 1) CX = '';  end
 if(src(2) == 2) CX = '2'; end
 
 % Process and check the date strings
-posYrs = [2002:2017];
+posYrs = [2002:2018];
 posMns = [1:12];
 whos sdate; disp([sdate ' to ' edate]); fprintf('\n');
 try 
@@ -108,7 +114,7 @@ cchns = xchns;
    
 % ************* load up SNO data ********************
 
-dp     = ['/home/chepplew/data/sno/iasi' IX '_cris' CX '/LR/' cYr1 '/'];
+dp     = ['/home/chepplew/data/sno/iasi' IX '_cris' CX '/ASL/' CR '/' cYr1 '/'];
 snoLst = dir(strcat(dp, 'sno_iasi_cris_asl_*.mat'));
 fprintf(1,'Found %d total SNO files in %s\n',numel(snoLst), dp);
 
@@ -135,13 +141,13 @@ s.iqual = []; s.clnfr = [];  s.ifov = [];    s.cfov = []; s.prcver = [];
 for ifn = 1:numel(snoLst)  % ifn1:ifn2;
   vars = whos('-file',strcat(dp,snoLst(ifn).name));
   if( ismember('ri', {vars.name}) & ismember('rc', {vars.name}) & ...
-      ismember('i2rc', {vars.name})  )  
+      ismember('ri2c', {vars.name})  )  
     g=load(strcat(dp, snoLst(ifn).name));
-    if  (size(g.ri,2) == 8461 & size(g.rc,2) == 1317 & size(g.i2rc,1) == 1317) 
+    if  (size(g.ri,2) == 8461 & size(g.rc,2) == ncc & size(g.ri2c,1) == ncc) 
         %junk    = single(hamm_app(double(g.rc(:,cchns))'));
       s.rc      = [s.rc, g.rc(:,cchns)'];               % 
       s.ri      = [s.ri, g.ri(:,ichns)'];               %
-      s.rd      = [s.rd, g.i2rc(cchns,:)];              %
+      s.rd      = [s.rd, g.ri2c(cchns,:)];              %
       s.ctime   = [s.ctime; g.ctime];
       s.itime   = [s.itime; g.itime];
       s.clat    = [s.clat;  g.clat];         s.clon = [s.clon;  g.clon];

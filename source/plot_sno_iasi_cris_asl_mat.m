@@ -4,9 +4,12 @@
 % currently no neighbour FOVs
 % Manual edits required for which missions (IASAI-1,2 CrIS-1,2) and resolution.
 %
-% plot options
+% 
 
-phome = '/home/chepplew/projects/sno/iasi_cris/LR/figs/';
+addpath /asl/matlib/aslutil               % drdbt.m
+
+% Initialization
+phome = '/home/chepplew/projects/sno/iasi_cris/HR/figs/';
 hamm  = 1;
 
 % --------------- convert to BT ----------------------------

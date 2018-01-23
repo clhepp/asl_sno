@@ -13,7 +13,7 @@ function [s] = load_sno_airs_cris_asl_mat(sdate, edate, xchns, res, src)
 %           (c) xchns: numeric IDs of CrIS channels to load based on NO guard channel list. 
 %              eg [403 499 737 884 905 998 1021 1297] or [399:408], 
 %              LW: [1:713], MW: [714:1146], SW: [1147:1305]
-%                           MW: [714:1360], SW: [1361:1950] for 'hires3'
+%                           MW: [714:1346], SW: [1347:1935] for 'hires3'
 %           (d) CrIS spectral resolution. one of: {'low', 'high'}.
 %           (e) CrIS mission (NPP = 1, or JPSS-1 = 2) [1 or 2].
 %
@@ -143,7 +143,7 @@ if LR
 end
 if HR
   xx   = load('/home/chepplew/projects/sno/airs_cris/fa2c_x.mat');
-  fa2c = xx.fa2c_hires;  clear xx;
+  fa2c = xx.fa2c_hires3;  clear xx;
   xx   = load('cris_hr_freq_2grd.mat'); fcris = xx.vchan; icris = xx.ichan; 
   nvc  = length(fcris); 
   nvd  = length(fa2c);
@@ -158,6 +158,8 @@ if HR [~, cchns]  = intersect(icris, xchns);  end
 % ra2c (airs2cris) is supplied on 1178 channel grid
 % Get the channels to load ra2c
 [~, dchns] = intersect(fa2c, fcris(cchns));
+if(length(dchns) ~= length(cchns)) disp('channel mismatch'); 
+ cchns = intersect(fcris(cchns),fa2c(dchns)); end 
 
 % the A2C channels are a subset of the CrIS channels
 [iwant,~] = seq_match(fcris(cchns), fa2c(dchns));
