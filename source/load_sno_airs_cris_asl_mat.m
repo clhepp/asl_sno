@@ -106,7 +106,12 @@ if HR
    dp = ['/home/chepplew/data/sno/airs_cris' CX '/ASL/HR/' cyr1 '/']; end
 if LR  
    dp = ['/home/chepplew/data/sno/airs_cris' CX '/ASL/LR/' cyr1 '/']; end
-snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c.mat'));
+if(src == 1)
+  snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_v20a.mat'));
+end
+if(src == 2)
+  snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_j1v3_a2v3.mat'));
+end
 
 ifn1 = 1;             % default start with first file unless later.
 for i=1:numel(snoLst)

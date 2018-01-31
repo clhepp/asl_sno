@@ -1,24 +1,22 @@
-function [s] = load_sno_airs_iasi_asl_mat_v2(sdate1, sdate2, xchns, src)
+function [s] = load_sno_airs_iasi_asl_mat_v2(sdate, edate, xchns, iasi)
 %
 % function load_sno_airs_iasi_asl_mat() loads up radiances for a selected number
 %   of channels, specified by AIRS channel number, from the ASL SNO mat files 
 %   and for the specified year and months. 
-%   Unlike the sister function 'read_sno...'
-%   this function cacluates statistics during load and subsets of CrIS FOV.
 %
-% Synopsis: load_sno_airs_iasi_asl_mat('date1','date2',[chan1...chan10]);
-%           date1: first month as string: 'YYYY/MM/DD'
-%           date2: last month as string:  'YYYY/MM/DD'
-%           N.B. Only accepts the same year.
-%           xchns: numeric IDs of CrIS channels to load based on NO guard channel list. 
-%           (max 10).
-%           eg [403 499 737 884 905 998 1021 1297] or [566:824];
-%           [   1:1269] (645  - 1100) cm-1
-%           [1270:2160] (1100 - 1615) cm-1
+% Synopsis: load_sno_airs_iasi_asl_mat('sdate','edate',[chan1...chan10], src);
 %
-% Output:  Two structures of arrays. 
+% INPUTS    1. sdate: start date as string: 'YYYY/MM/DD'
+%           2. edate: end date as string:   'YYYY/MM/DD'
+%              N.B. Only accepts the same year.
+%           3. xchns: numeric IDs of AIRS L1C channels to load. 
+%             eg [403 499 737 884 905 998 1021 1297] or [566:824];
+%                [   1:1269] (645  - 1100) cm-1
+%                [1270:2160] (1100 - 1615) cm-1
+%           4. iasi: IASI mission number [1 or 2] IASI-1 or IASI-2
+%
+% Output:  structure of arrays. 
 %             s: the SNO single fields.
-%             a: whole spectrum averages and first moment.
 %
 %
 % Notes: If the selected channel is associated with a bad AIRS channel or has been
@@ -56,31 +54,36 @@ junk = [-5:.05:5]; y0 = normpdf(junk,0,1); yp = cumsum(y0)./20.0; clear junk y0;
 s.prf  = yp;
 
 % Process and check the date strings
-posYrs = [2002:2017];
+posYrs = [2002:2018];
 posMns = [1:12];
-whos sdate1; disp([sdate1 ' to ' sdate2]); fprintf('\n');
+whos sdate; disp([sdate ' to ' edate]); fprintf('\n');
 try 
-   D1 = datenum(sdate1,'yyyy/mm/dd');
-   D2 = datenum(sdate2,'yyyy/mm/dd');
+   D1 = datenum(sdate,'yyyy/mm/dd');
+   D2 = datenum(edate,'yyyy/mm/dd');
 catch
    error('Incorrect Date Format')
    return
 end
-s.dtime1 = datetime(D1,'convertFrom','datenum');
+s.sdtime = datetime(D1,'convertFrom','datenum');
 [nYr1 nMn1 nDy1] = datevec(D1);
 [nYr2 nMn2 nDy2] = datevec(D2);
 if(nYr1 ~= nYr2) error('Use same year only'); return; end
-cYr1   = sdate1(1:4);     cMn1 = sdate1(6:7);     cDy1 = sdate1(9:10);
-cYr2   = sdate2(1:4);     cMn1 = sdate2(6:7);     cDy1 = sdate2(9:10);
+cYr1   = sdate(1:4);     cMn1 = sdate(6:7);     cDy1 = sdate(9:10);
+cYr2   = edate(1:4);     cMn2 = edate(6:7);     cDy2 = sdate(9:10);
 
   junk = sprintf('%4d/%02d/%02d',nYr1-1,12,31);
-jdy1   = datenum(sdate1)-datenum(junk);  clear junk;           % needed for data directory
+jdy1   = datenum(sdate)-datenum(junk);  clear junk;           % needed for data directory
   junk = sprintf('%4d/%02d/%02d',nYr2-1,12,31);
-jdy2   = datenum(sdate2)-datenum(junk);  clear junk;           % needed for data directory
+jdy2   = datenum(edate)-datenum(junk);  clear junk;           % needed for data directory
 
 % Check channel numbers entered correctly
 if(length(xchns) > 20 || length(xchns) < 1 ) fprintf(1,'Wrong number channels\n'); end
 if(min(xchns) < 1 || max(xchns) > 1317 ) fprintf(1,'Wrong channel numbers used\n'); end
+
+% Check IASI Mission source
+if(~ismember(iasi,[1,2])) error('Invalid IASAI mission number [1 or 2]'); return; end
+if(iasi == 1) IX = '';  IR = 'M02'; end
+if(iasi == 2) IX = '2'; IR = 'M01'; end
 
 % load IASI and AIRS channels & good AIRS channels (nig) to use, & bad (nib) to avoid
 load('/home/chepplew/projects/iasi/f_iasi.mat');               % f_iasi [8641 x 1]
@@ -93,7 +96,8 @@ junk = ismember([1:2378], nig);  nib = find(junk == 0);  clear junk;
 [zi ichns] = seq_match(f2645(xchns),f_iasi);
    
 % Screen the channel selection for AIRS bad channels and report any:
-achns  = xchns;
+achns  = xchns';
+
 %{
 agood  = logical(zeros(1,numel(achns)));         % set all to good.
 for i=1:numel(cWavs)
@@ -106,42 +110,39 @@ for i = 1:numel(aWavs)
   if(agood(i)) fprintf(1,'Good AIRS l1b channel: %d, %7.3f\n', i,aWavs(i)); end
 end
 %}
-% ************* load up SNO data ********************
+% ************* Get the SNO data for dates range ********************
 
-dp = ['/home/chepplew/data/sno/airs_iasi/ASL/' cYr1 '/'];
-% snoLst = dir(strcat(dp, 'sno_airs_crisLR_clh_*_018d600s.mat'));
-snoLst = dir(strcat(dp, 'sno_airs_iasi_*_frmL1c.mat'));
+dp     = ['/home/chepplew/data/sno/airs_iasi' IX '/ASL/' cYr1 '/'];
+snoLst = dir(strcat(dp, 'sno_airs_iasi_*_frmL1C.mat'));
 fprintf(1,'Found %d total SNO files\n',numel(snoLst));
 
-%{
-% subset range by date as requested:
-dstart = datenum([nyr1 nmn1 ndy1]);
-dlast  = datenum([nyr2 nmn2 ndy2]);
 ifn1 = 1;             % default start with first file unless later.
 for i=1:numel(snoLst)
-  %junk = snoLst(i).name(15:22);               % specific file name only
-  junk = regexp(snoLst(i).name,'(?<=_)[\d8]+(?=_018d)','match'); 
-  thisdat = datenum( [str2num(junk{1}(1:4)) str2num(junk{1}(5:6)) str2num(junk{1}(7:8))] );
-  if(thisdat <= dstart) ifn1 = i; end
-  if(thisdat <= dlast) ifn2 = i; end
+  junk = regexp(snoLst(i).name,'[0-9]','match');
+  junk = cell2mat(junk(1:end));                   % no. 4 appears before date
+  thisdat = datenum(junk,'yyyymmdd');
+  if(thisdat < D1)  ifn1 = i+1; end
+  if(thisdat <= D2) ifn2 = i; end
 end
-fprintf(1,'Processing SNO files from: %s to %s\n',snoLst(ifn1).name(21:28), ...
-        snoLst(ifn2).name(21:28));
-%}
-%%%%%%%%%
-s.tdiff = [];    s.ra = [];    s.ri = [];      s.rd = [];  s.itime = [];  s.atime = []; 
- s.alat = [];  s.alon = []; s.dist  = [];    s.ilat = [];   s.ilon = [];  s.csolz = [];  
-s.iqual = []; s.alnfr = [];  s.ifov = []; 
+disp(['Source dir: ' dp]);
+fprintf(1,'Loading %d SNO files from: %s to %s\n',(ifn2-ifn1+1),snoLst(ifn1).name, ...
+        snoLst(ifn2).name);
 
-for ifn = 1:numel(snoLst)  % ifn1:ifn2;
+% -------------------------------------------------------------------------
+s.tdiff = [];    s.ra = [];    s.ri = [];    s.ri2a = [];  s.itime = [];  s.atime = []; 
+ s.alat = [];  s.alon = []; s.dist  = [];    s.ilat = [];   s.ilon = [];  s.isolz = [];
+s.asolz = [];  
+s.iqual = []; s.alnfr = [];  s.ifov = [];    s.l1cproc = []; s.l1creas = [];
+
+for ifn = ifn1:ifn2;
   vars = whos('-file',strcat(dp,snoLst(ifn).name));
-  if( ismember('iObs', {vars.name}) & ismember('aObs', {vars.name}) & ...
-      ismember('i2ra', {vars.name})  )  
+  if( ismember('ri', {vars.name}) & ismember('ra', {vars.name}) & ...
+      ismember('ri2a', {vars.name})  )  
     load(strcat(dp, snoLst(ifn).name));
-    if  (size(iObs,1) == 8461 & size(aObs,1) == 2645 & size(i2ra,1) == 2645) 
-      s.ra      = [s.ra, aObs(achns,:)];                   % 
-      s.ri      = [s.ri, iObs(ichns,:)];      clear rc_ham;
-      s.rd      = [s.rd, i2ra(achns,:)];              %
+    if(size(ri,1) == 8461 & size(ra,1) == 2645 & size(ri2a,1) == 2645) 
+      s.ra      = [s.ra,   ra(achns,:)];                   % 
+      s.ri      = [s.ri,   ri(ichns,:)];      clear rc_ham;
+      s.ri2a    = [s.ri2a, ri2a(achns,:)];              %
       s.atime   = [s.atime; sno.atim];
       s.itime   = [s.itime; sno.itim];
       s.alat    = [s.alat;  sno.alat];         s.alon = [s.alon;  sno.alon];
@@ -151,8 +152,9 @@ for ifn = 1:numel(snoLst)  % ifn1:ifn2;
       s.tdiff   = [s.tdiff; sno.tdiff];                       %
       s.dist    = [s.dist;  sno.dist'];
       s.alnfr   = [s.alnfr; sno.alandfr];
-      %s.l1cr   = [s.l1cr, g.l1cReason'];
-      %s.l1cp   = [s.l1cp, g.l1cProc'];
+      s.asolz   = [s.asolz; sno.asolzen];    s.isolz = [s.isolz; sno.isolzen];
+      s.l1creas = [s.l1creas, l1cSynthReason(achns,:)];
+      s.l1cproc = [s.l1cproc, l1cProc(achns,:)];
     end
   else
     disp(['Skipping: ' snoLst(ifn).name]);

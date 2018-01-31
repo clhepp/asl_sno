@@ -1,4 +1,4 @@
-function [s] = load_sno_iasi_cris_asl_mat(sdate, edate, xchns, src)
+function [s] = load_sno_iasi_cris_asl_mat(sdate, edate, xchns, cris_res, src)
 %
 % function load_sno_iasi_cris_asl_mat() loads up radiances for a selected number
 %   of channels, specified by CrIS channel number, from the ASL SNO mat files 
@@ -16,6 +16,7 @@ function [s] = load_sno_iasi_cris_asl_mat(sdate, edate, xchns, src)
 %              LW: [1:717], MW:[718:1154], SW:[1155:1317];
 %                  [1:1269] (645  - 1100) cm-1
 %                  [1270:2160] (1100 - 1615) cm-1
+%           cris_res:  CrIS spectral resolution {'low','high'}
 %           src:  [M1, M2]. mission numbers: iasi-1 or iasi-2 (MetOp-A or -B) 
 %                 and cris-1 or cris-2 (NPP or JPSS-1), 
 %
@@ -58,10 +59,10 @@ junk = [-5:.05:5]; y0 = normpdf(junk,0,1); yp = cumsum(y0)./20.0; clear junk y0;
 s.prf  = yp;
 
 % Check number of input arguments
-if(nargin ~= 4) error('Please enter all 4 input arguments'); return; end
+if(nargin ~= 5) error('Please enter all 5 input arguments'); return; end
 
 % Check CrIS resolution (high or low)
-cris_res='high';
+%cris_res='high';
 cris_res = upper(cris_res);
 if(strcmp(cris_res,'HIGH')) CR='HR'; ncc=2223; end
 if(strcmp(cris_res,'LOW'))  CR='LR'; ncc=1317; end
@@ -115,8 +116,9 @@ cchns = xchns;
 % ************* load up SNO data ********************
 
 dp     = ['/home/chepplew/data/sno/iasi' IX '_cris' CX '/ASL/' CR '/' cYr1 '/'];
-snoLst = dir(strcat(dp, 'sno_iasi_cris_asl_*.mat'));
+snoLst = dir(strcat(dp, 'sno_iasi_cris_asl_*v20a.mat'));
 fprintf(1,'Found %d total SNO files in %s\n',numel(snoLst), dp);
+if(numel(snoLst) < 1) return; end;
 
 %{
 % subset range by date as requested:
@@ -142,11 +144,11 @@ for ifn = 1:numel(snoLst)  % ifn1:ifn2;
   vars = whos('-file',strcat(dp,snoLst(ifn).name));
   if( ismember('ri', {vars.name}) & ismember('rc', {vars.name}) & ...
       ismember('ri2c', {vars.name})  )  
-    g=load(strcat(dp, snoLst(ifn).name));
-    if  (size(g.ri,2) == 8461 & size(g.rc,2) == ncc & size(g.ri2c,1) == ncc) 
+    g=load(strcat(snoLst(ifn).folder,'/', snoLst(ifn).name));
+    if  (size(g.ri,1) == 8461 & size(g.rc,1) == ncc & size(g.ri2c,1) == ncc) 
         %junk    = single(hamm_app(double(g.rc(:,cchns))'));
-      s.rc      = [s.rc, g.rc(:,cchns)'];               % 
-      s.ri      = [s.ri, g.ri(:,ichns)'];               %
+      s.rc      = [s.rc, g.rc(cchns,:)];               % 
+      s.ri      = [s.ri, g.ri(ichns,:)];               %
       s.rd      = [s.rd, g.ri2c(cchns,:)];              %
       s.ctime   = [s.ctime; g.ctime];
       s.itime   = [s.itime; g.itime];
@@ -180,6 +182,7 @@ ibad = [];  % find(s.iqual > 0);
 
 % Remove 6-sigma
 icbias = s.rd - s.rc;
+whos icbias
 disp(['Removing outliers']);
 clear gx;
 for i=1:length(cchns)

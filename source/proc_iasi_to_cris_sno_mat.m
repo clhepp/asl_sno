@@ -37,7 +37,7 @@ if(~all(ismember(CRIS,[0, 1]))) error('Invalid CrIS Mission selection'); return;
 end
 
 % Check input parameter for IASI mission
-if(~ismember(iasi, [1,2])) error('Invalid IASI mission number'); return end
+if(~ismember(iasi, [1,2])) error('Invalid IASI mission number'); return; end
 if(iasi == 1) IX = ''; end
 if(iasi == 2) IX = '2'; end
 
@@ -63,7 +63,7 @@ end
 if any(and(CRIS,[0,1]))
   CX    = '2';
   dp    = ['/asl/s1/chepplew/data/sno/iasi' IX '_cris' CX '/ASL/' RES '/' cyear '/'];
-  snoLst = dir([dp 'sno_iasi_cris_asl_' cyear '*.mat']);
+  snoLst = dir([dp 'sno_iasi_cris_asl_' cyear '*UWa2.mat']);
   fpatt = '''sno_iasi_cris*.mat''';               % 3x' required to include ' in the variable
 end
   
