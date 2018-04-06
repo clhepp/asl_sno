@@ -61,7 +61,7 @@ LR = false(1);
 HR = false(1);
 
 % Assign version string, vers:
-allvers =  {'','v20a','a2v4_ref','j1v3_a2v3','a2_test1'};
+allvers =  {'','v20a','_v20a','a2v4_ref','j1v3_a2v3','a2_test1'};
 vers = lower(vers);
 if(~ismember(vers,allvers)); error('version is unrecognized'); return; end
 %vers = 'a2v4_p20';
