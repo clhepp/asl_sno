@@ -1,4 +1,4 @@
-function [s] = load_sno_airs_cris_asl_mat(sdate, edate, xchns, res, src)
+function [s] = load_sno_airs_cris_asl_mat(sdate, edate, xchns, res, src, vers)
 %
 % function load_sno_airs_cris_asl_mat() loads up radiances for a selected number
 %   of channels, specified by CrIs channel number, from the JCET SNO mat files 
@@ -16,6 +16,7 @@ function [s] = load_sno_airs_cris_asl_mat(sdate, edate, xchns, res, src)
 %                           MW: [714:1346], SW: [1347:1935] for 'hires3'
 %           (d) CrIS spectral resolution. one of: {'low', 'high'}.
 %           (e) CrIS mission (NPP = 1, or JPSS-1 = 2) [1 or 2].
+%           (f) vers: string. version reference for data set.
 %
 % Output:  One structures of arrays. 
 %          s: the SNO data fields:
@@ -59,16 +60,22 @@ disp('Hello! this is load_sno_airs_cris_asl_mat.m');
 LR = false(1);
 HR = false(1);
 
+% Assign version string, vers:
+allvers =  {'','v20a','a2v4_ref','j1v3_a2v3','a2_test1'};
+vers = lower(vers);
+if(~ismember(vers,allvers)); error('version is unrecognized'); return; end
+%vers = 'a2v4_p20';
+
 % Check number of input arguments
-if(nargin ~= 5) error('Please enter all 5 input arguments'); return; end
+if(nargin ~= 6) error('Please enter all 6 input arguments'); return; end
 
 % Check mission numbers
 if(length(src) ~=1) error('Need only CRIS mission number'); return; end
 junk = ismember(src,[1,2]);
 if(~all(junk)) error('Mission numbers can only be 1 or 2 for now'); return; end
 disp(['you have selected CRIS-' num2str(src)]);
-if(src == 1) CX = '';  end
-if(src == 2) CX = '2'; end
+if(src == 1) CX = '';  end % vers = 'v20a';   end
+if(src == 2) CX = '2'; end % vers = 'a2v4rf'; end
 
 % ------------------------
 % Process the date strings
@@ -107,10 +114,11 @@ if HR
 if LR  
    dp = ['/home/chepplew/data/sno/airs_cris' CX '/ASL/LR/' cyr1 '/']; end
 if(src == 1)
-  snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_v20a.mat'));
+  %snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_',vers,'.mat'));
+  snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c',vers,'.mat')); %2016
 end
 if(src == 2)
-  snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_j1v3_a2v3.mat'));
+  snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_',vers,'.mat'));
 end
 
 ifn1 = 1;             % default start with first file unless later.
@@ -211,8 +219,8 @@ for ifn = ifn1:1:ifn2;
       s.cFov    = [s.cFov;  sno.cFov];
       s.tdiff   = [s.tdiff; sno.tdiff];                       %
       s.dist    = [s.dist;  sno.dist];
-      s.l1creas = [s.l1creas, l1cSynthReason(achns,:)];
-      s.l1cproc = [s.l1cproc, l1cProc(achns,:)];
+      %s.l1creas = [s.l1creas, l1cSynthReason(achns,:)];
+      %s.l1cproc = [s.l1cproc, l1cProc(achns,:)];
     end
   else
     disp(['Skipping: ' snoLst(ifn).name]);
@@ -227,6 +235,7 @@ s.fd    = fa2c;
 s.achns = achns';
 s.cchns = cchns;
 s.dchns = dchns;
+s.vers  = vers;
 
 % -------------------------------------------------------------------
 % *************     Apply QC - this is ESSENTIAL !     *************

@@ -176,7 +176,7 @@ iok  = find(s.iqual == 0);
 ibad = find(s.iqual > 0);
 
 % Remove 6-sigma
-aibias = s.rd - s.ra;
+aibias = s.ri2a - s.ra;
 disp(['Removing outliers']);
 clear gx;
 for i=1:length(achns)
