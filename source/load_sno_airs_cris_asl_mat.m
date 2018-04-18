@@ -168,14 +168,19 @@ end
 if LR [~, cchns]  = intersect(icris, xchns);  end
 if HR [~, cchns]  = intersect(icris, xchns);  end
 
-% ra2c (airs2cris) is supplied on 1178 channel grid
+% ra2c (airs2cris) is supplied on different channel grids, and MW band is restricted.
 % Get the channels to load ra2c
 [~, dchns] = intersect(fa2c, fcris(cchns));
 if(length(dchns) ~= length(cchns)) disp('channel mismatch'); 
- cchns = intersect(fcris(cchns),fa2c(dchns)); end 
+   [ftmp, ~]  = intersect(fcris(cchns),fa2c(dchns));
+   [~, cchns] = intersect(fcris, ftmp);
+%else
+%   [iwant,~] = intersect(cchns, dchns);    % seq_match(fcris(cchns), fa2c(dchns));
+%   cchns = iwant;
+end 
 
 % the A2C channels are a subset of the CrIS channels
-[iwant,~] = seq_match(fcris(cchns), fa2c(dchns));
+%[iwant,~] = seq_match(fcris(cchns), fa2c(dchns));
 
  % map AIRS good chans to 2645 grid (not used here)
 [zi zj] = seq_match(sort(f2378(nig)), f2645);
@@ -236,7 +241,7 @@ s.achns = achns';
 s.cchns = cchns;
 s.dchns = dchns;
 s.vers  = vers;
-
+s
 % -------------------------------------------------------------------
 % *************     Apply QC - this is ESSENTIAL !     *************
 % remove -999 CrIS or A2C radiances separately also do AIRS < -999
@@ -315,7 +320,7 @@ save(savfn,'fa','fc','fa2c','ra','rc','ra2c','-v7.3')
 %  ------------------   plot checks -------------------------
 abt = real(rad2bt(s.fa(s.achns), s.ra));
 cbt = real(rad2bt(s.fc(s.cchns), s.rc));
-dbt = real(rad2bt(s.fd(s.dchns), s.rd));
+dbt = real(rad2bt(s.fd(s.dchns), s.ra2c));
 abm = nanmean(abt,2);
 cbm = nanmean(cbt,2);
 dbm = nanmean(dbt,2);
