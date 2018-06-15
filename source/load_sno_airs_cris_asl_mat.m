@@ -16,7 +16,8 @@ function [s] = load_sno_airs_cris_asl_mat(sdate, edate, xchns, res, src, vers)
 %                           MW: [714:1346], SW: [1347:1935] for 'hires3'
 %           (d) CrIS spectral resolution. one of: {'low', 'high'}.
 %           (e) CrIS mission (NPP = 1, or JPSS-1 = 2) [1 or 2].
-%           (f) vers: string. version reference for data set.
+%           (f) vers: string. version reference for data set (found at end of file
+%               name).
 %
 % Output:  One structures of arrays. 
 %          s: the SNO data fields:
@@ -115,11 +116,12 @@ if LR
    dp = ['/home/chepplew/data/sno/airs_cris' CX '/ASL/LR/' cyr1 '/']; end
 if(src == 1)
   %snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_',vers,'.mat'));
-  snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c',vers,'.mat')); %2016
+  snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_',vers,'.mat')); %2016
 end
 if(src == 2)
   snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_',vers,'.mat'));
 end
+disp(['Found ' num2str(numel(snoLst)) ' SNO files']);
 
 ifn1 = 1;             % default start with first file unless later.
 for i=1:numel(snoLst)
@@ -241,6 +243,9 @@ s.achns = achns';
 s.cchns = cchns;
 s.dchns = dchns;
 s.vers  = vers;
+s.sdate = sdate;
+s.edate = edate;
+
 s
 % -------------------------------------------------------------------
 % *************     Apply QC - this is ESSENTIAL !     *************
@@ -330,8 +335,8 @@ ich = 16;
 figure(1);clf;simplemap(s.cLat, s.cLon, cbt(ich,:)');
 figure(1);clf;simplemap(s.cLat, s.cLon, (dbt(ich,:) - cbt(ich,:)));
 
-figure(2);clf;plot(s.fa(s.achns),abt(:,1),'.-', s.fc(s.cchns),cbt(:,1),'.-', ...
-  s.fd(s.dchns),dbt(:,1),'.-');grid on;legend('AIRS','CrIS','A2C');
+figure(2);clf;plot(s.fa(s.achns),abt(:,1),'-', s.fc(s.cchns),cbt(:,1),'-', ...
+  s.fd(s.dchns),dbt(:,1),'-');grid on;legend('AIRS','CrIS','A2C');
   figure(3);clf;plot([1:66493],cbt(4,:) - abt(4,:),'-');             
   figure(3);clf;plot([1:66493],cbt(4,:) - dbt(4,:),'-');
 figure(2);cla;plot(s.fa(s.achns),abm,'-', s.fc(s.cchns),cbm,'-', ...
@@ -339,6 +344,8 @@ figure(2);cla;plot(s.fa(s.achns),abm,'-', s.fc(s.cchns),cbm,'-', ...
 [zc zd] = seq_match(s.fc(s.cchns), s.fd(s.dchns));
 figure(3);cla;plot(s.fc(s.cchns(zc)), cbm(zc) - dbm(zd),'-');grid on;
   axis([640 1100 -0.8 0.8]);
+figure(4);cla;plot(s.fc(s.cchns(zc)), cbm(zc) - dbm(zd),'-');grid on;
+  axis([1200 1610 -0.8 0.8]);
   
 ich=16;
 nanmean(cbt(ich,:) - dbt(ich,:))

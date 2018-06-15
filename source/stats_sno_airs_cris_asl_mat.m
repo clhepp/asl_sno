@@ -5,6 +5,8 @@ function r = stats_sno_airs_cris_asl_mat(s)
 % first run:  [s] = load_sno_airs_cris_asl_mat(sdate1, sdate2, xchns, res, src, vers);
 
 
+% Hardwire spectral band
+band = 'LW';              % {'LW','MW','SW'}
 
 % plot options
 % set(gcf,'Resize','off');
@@ -127,10 +129,10 @@ qcBins.B = quantile(cbt,s.prf,2);
 qdBins.B = quantile(xbt,s.prf,2);
 qc       = cell2mat(struct2cell(qcBins));
 qd       = cell2mat(struct2cell(qdBins));
-qsBins   = (qc + qd)/2.0;
+qcd      = (qc + qd)/2.0;
 
 for jj = 1:numel(s.cchns)
-  sbins = qsBins(jj,:);
+  sbins = qcd(jj,:);
   [dbin dbinStd dbinN dbinInd] = Math_bin(xbt(jj,:),cbt(jj,:)-xbt(jj,:),sbins); 
   [cbin cbinStd cbinN cbinInd] = Math_bin(cbt(jj,:),cbt(jj,:)-xbt(jj,:),sbins);
 
@@ -158,9 +160,11 @@ for jj = 1:numel(s.cchns)
   fprintf(1,'.');
 end
 fprintf(1,'\n');
+q.qn = qcd;
   whos q     % binsz btbias btstd btser
 
 % ------------------- Hot Bin Investigation ----------------------
+%{
 disp('working on hot scenes');
 btbins  = [190.0: 0.2: 330]; btcens = [190.1: 0.2: 329.9];
 ich = 12;
@@ -189,7 +193,7 @@ for i=1:size(dbt,1) pdf_dbt_bin304(i,:) = histcounts(dbt(i,uHot304), btbins); en
 %for i=1:size(cbt,1) pdf_nbr_cbt_bin304(i,:) = histcounts(nbr_cbt(i,:,uHot304), btbins); end
 %for i=1:size(abt,1) pdf_nbr_abt_bin304(i,:) = histcounts(nbr_abt(i,:,uHot304), btbins); end
 %for i=1:size(dbt,1) pdf_nbr_dbt_bin304(i,:) = histcounts(nbr_dbt(i,:,uHot304), btbins); end
-
+%}
 %{
 figure(5);clf;semilogy(btcens, pdf_dbt_bin290(ich,:),'.-', btcens, pdf_cbt_bin290(ich,:),'.-');
   xlim([275 315]);grid on;hold on;
@@ -269,6 +273,13 @@ fprintf(1,'.')
 end
 
 % ----------------- choose which variables to return ------------
+r.vers = vers;
+r.band = band;
+r.sdate = s.sdate;     r.edate = s.edate;
+r.nsam = size(dbt,2);
+r.fa = fa; r.fc = fc; r.fd = fd;
+r.cbt      = cbt;
+r.btbias   = single(btbias);
 r.abm = abm;  r.cbm = cbm;  r.dbm = dbm;
 r.bias_mn  = bias_mn;  r.bias_sd = bias_sd; r.btser = btser;  r.btstd = btstd;
 r.fov      = fov;
@@ -278,10 +289,11 @@ r.pdf_dbt  = pdf_dbt;
 r.btbins   = btbins;      r.btcens  = btcens;
 r.pdf_bias = pdf_bias;
 r.biasbins = biasbins;  r.biascens = biascens;
+r.q        = q;
+r.fov      = fov;
+
 %
 
-r.fa =fa; r.fd = fd; r.fc = fc;
-r.nsam = size(dbt,2);
 
 disp('completed and return structure r');
 
