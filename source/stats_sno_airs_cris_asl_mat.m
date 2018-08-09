@@ -1,4 +1,4 @@
-function r = stats_sno_airs_cris_asl_mat(s)
+function r = stats_sno_airs_cris_asl_mat(s,band)
 
 % stats_sno_airs_cris_asl_mat.m
 %
@@ -6,7 +6,7 @@ function r = stats_sno_airs_cris_asl_mat(s)
 
 
 % Hardwire spectral band
-band = 'LW';              % {'LW','MW','SW'}
+if(~ismember(band,{'LW','MW','SW'})) error('Invalid band'); return; end
 
 % plot options
 % set(gcf,'Resize','off');
@@ -213,8 +213,8 @@ for i = 1:9 nFOV(i) = numel(xFOV{i}); end
 rc_tmp = s.rc(:,s.ig);
 rd_tmp = s.rd(:,s.ig);
 for i=1:9
-  fov(i).cbt = rad2bt(s.fc(s.cchns), rc_tmp(:, xFOV{i}));
-  fov(i).dbt = real(rad2bt(s.fd(s.dchns), rd_tmp(:, xFOV{i})));
+  fov(i).cbt = real( rad2bt(s.fc(s.cchns), rc_tmp(:, xFOV{i})) );
+  fov(i).dbt = real( rad2bt(s.fd(s.dchns), rd_tmp(:, xFOV{i})) );
 end
 clear rc_tmp rd_tmp;
 %
@@ -273,11 +273,14 @@ fprintf(1,'.')
 end
 
 % ----------------- choose which variables to return ------------
-r.vers = vers;
-r.band = band;
+r.src   = s.src;
+r.res   = s.res;
+r.vers  = vers;
+r.band  = band;
 r.sdate = s.sdate;     r.edate = s.edate;
-r.nsam = size(dbt,2);
-r.fa = fa; r.fc = fc; r.fd = fd;
+r.nsam  = size(dbt,2);
+r.fa    = fa;         r.fc = fc;         r.fd = fd;
+r.achns = s.achns; r.cchns = s.cchns; r.dchns = s.dchns;
 r.cbt      = cbt;
 r.btbias   = single(btbias);
 r.abm = abm;  r.cbm = cbm;  r.dbm = dbm;

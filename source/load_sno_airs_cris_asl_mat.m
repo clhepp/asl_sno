@@ -245,7 +245,8 @@ s.dchns = dchns;
 s.vers  = vers;
 s.sdate = sdate;
 s.edate = edate;
-
+s.src   = src;    % spacraft mission
+s.res   = res;
 s
 % -------------------------------------------------------------------
 % *************     Apply QC - this is ESSENTIAL !     *************

@@ -113,52 +113,55 @@ load('/home/chepplew/projects/cris/cris_freq_2grd.mat'); fc = vchan;
 ichns = [find(f_iasi >= fc(xchns(1)),1): find(f_iasi >= fc(xchns(end)),1)]; 
 cchns = xchns;
    
-% ************* load up SNO data ********************
+% ************* get list and subset date range  ********************
 
 dp     = ['/home/chepplew/data/sno/iasi' IX '_cris' CX '/ASL/' CR '/' cYr1 '/'];
-snoLst = dir(strcat(dp, 'sno_iasi_cris_asl_*v20a.mat'));
+snoLst = dir(strcat(dp, 'sno_iasi_cris_asl_*_v20a.mat'));            % don't distinguish versions
 fprintf(1,'Found %d total SNO files in %s\n',numel(snoLst), dp);
 if(numel(snoLst) < 1) return; end;
 
-%{
 % subset range by date as requested:
-dstart = datenum([nyr1 nmn1 ndy1]);
-dlast  = datenum([nyr2 nmn2 ndy2]);
 ifn1 = 1;             % default start with first file unless later.
 for i=1:numel(snoLst)
-  %junk = snoLst(i).name(15:22);               % specific file name only
-  junk = regexp(snoLst(i).name,'(?<=_)[\d8]+(?=_018d)','match'); 
-  thisdat = datenum( [str2num(junk{1}(1:4)) str2num(junk{1}(5:6)) str2num(junk{1}(7:8))] );
-  if(thisdat <= dstart) ifn1 = i; end
-  if(thisdat <= dlast) ifn2 = i; end
+  junk = regexp(snoLst(i).name,'[0-9]','match');
+  junk = cell2mat(junk(1:8));                   % omit trailing numbers after date
+  thisdat = datenum(junk,'yyyymmdd');
+  if(thisdat < D1)  ifn1 = i+1; end
+  if(thisdat <= D2) ifn2 = i; end
 end
-fprintf(1,'Processing SNO files from: %s to %s\n',snoLst(ifn1).name(21:28), ...
-        snoLst(ifn2).name(21:28));
-%}
-%%%%%%%%%
+disp(['Source dir: ' dp]);
+fprintf(1,'Loading %d SNO files from: %s to %s\n',(ifn2-ifn1+1),snoLst(ifn1).name, ...
+        snoLst(ifn2).name);
+
+% ********************* load up SNO data *****************************
 s.tdiff = [];    s.rc = [];    s.ri = [];      s.rd = [];  s.itime = [];  s.ctime = []; 
  s.clat = [];  s.clon = []; s.dist  = [];    s.ilat = [];   s.ilon = [];  s.csolz = [];  
 s.iqual = []; s.clnfr = [];  s.ifov = [];    s.cfov = []; s.prcver = [];
 
-for ifn = 1:numel(snoLst)  % ifn1:ifn2;
+for ifn = ifn1:ifn2;
   vars = whos('-file',strcat(dp,snoLst(ifn).name));
   if( ismember('ri', {vars.name}) & ismember('rc', {vars.name}) & ...
-      ismember('ri2c', {vars.name})  )  
-    g=load(strcat(snoLst(ifn).folder,'/', snoLst(ifn).name));
-    if  (size(g.ri,1) == 8461 & size(g.rc,1) == ncc & size(g.ri2c,1) == ncc) 
-        %junk    = single(hamm_app(double(g.rc(:,cchns))'));
-      s.rc      = [s.rc, g.rc(cchns,:)];               % 
-      s.ri      = [s.ri, g.ri(ichns,:)];               %
-      s.rd      = [s.rd, g.ri2c(cchns,:)];              %
-      s.ctime   = [s.ctime; g.ctime];
-      s.itime   = [s.itime; g.itime];
-      s.clat    = [s.clat;  g.clat];         s.clon = [s.clon;  g.clon];
-      s.ilat    = [s.ilat;  g.ilat];         s.ilon = [s.ilon;  g.ilon];
-      s.ifov    = [s.ifov;  g.ifov];
-      s.cfov    = [s.cfov;  g.cfov];
-      s.csolz   = [s.csolz; g.csolzen];
-      s.tdiff   = [s.tdiff; g.tdiff];                       %
-      s.dist    = [s.dist;  g.dist];
+      (ismember('ri2c', {vars.name}) || ismember('i2rc',{vars.name})) )  
+    load(strcat(snoLst(ifn).folder,'/', snoLst(ifn).name));
+    % hack to deal with change field name
+    if( ismember('i2rc',{vars.name})) ri2c = i2rc; end
+    if( size(rc,2) ~= size(sno.clat,1) ) disp(['fn: ' num2str(ifn) ' size error']); 
+      continue; end
+    if( size(ri,1) == 8461 & size(rc,1) == ncc & size(ri2c,1) == ncc) 
+        rc_ham  = single(hamm_app(double(rc(cchns,:))) );
+      s.rc      = [s.rc, rc_ham];               % 
+      s.ri      = [s.ri, ri(ichns,:)];               %
+      s.rd      = [s.rd, ri2c(cchns,:)];              %
+      s.ctime   = [s.ctime; sno.ctim];
+      s.itime   = [s.itime; sno.itim];
+      s.clat    = [s.clat;  sno.clat];         s.clon = [s.clon;  sno.clon];
+      s.ilat    = [s.ilat;  sno.ilat];         s.ilon = [s.ilon;  sno.ilon];
+      s.ifov    = [s.ifov;  sno.ifov];
+      s.cfov    = [s.cfov;  sno.cfov];
+      s.csolz   = [s.csolz; sno.csolz];
+      s.tdiff   = [s.tdiff; sno.tdiff];                       %
+      s.dist    = [s.dist;  sno.dist'];
+      s.iqual   = [s.iqual; sno.iqual];
       %s.prcver  = [s.prcver; g.process_version];
       %s.alnfr   = [s.alnfr; sno.alandfr];
       %s.l1cr    = [s.l1cr, g.l1cReason'];
@@ -166,12 +169,12 @@ for ifn = 1:numel(snoLst)  % ifn1:ifn2;
     end
   else
     disp(['Skipping: ' snoLst(ifn).name]);
-  end           % if ismember(nbr_rLW)
+  end 
   fprintf(1,'.');
-end             % end for ifn
+end                        % end for ifn
 fprintf(1,'Loaded %d SNO pairs\n',size(s.ilat,1));
 
-s.fi = f_iasi;  s.fd = g.fi2c;  s.fc = g.fc;
+s.fi = f_iasi;  s.fd = fi2c;  s.fc = fc;
 s.cchns  = cchns;
 s.ichns  = ichns';
 s.dchns  = cchns;
@@ -205,6 +208,8 @@ clear gx n nn ux icbias;
 % combine iqual and r6s
 s.ibad   = sort(unique([ibad; sbad']));
 s.iok    = setdiff(1:psz, s.ibad);
+
+% ******************** END *******************
 
 %{
 % find highest l1cProc value for each channel 
