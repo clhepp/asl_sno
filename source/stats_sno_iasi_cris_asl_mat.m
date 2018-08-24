@@ -1,4 +1,4 @@
-r = stats_sno_iasi_cris_asl_mat(s, band)
+function r = stats_sno_iasi_cris_asl_mat(s, band)
 
 % first run:  [s] = load_sno_iasi_cris_asl_mat(sdate, edate, xchns, src);
 % currently no neighbour FOVs
@@ -39,7 +39,6 @@ ibt      = real(rad2bt(s.fi(s.ichns), s.ri(:,s.iok)));
 %nbr_dbt  = real(rad2bt(s.fd(s.dchns), s.nbr_rd(:,:,s.iok)));
 % ---------------- Basic Stats ------------------------------
 btbias   = dbt - cbt;
- whos *bt btbias
 ibm      = nanmean(ibt,2);
 cbm      = nanmean(cbt,2);
 dbm      = nanmean(dbt,2);
@@ -57,7 +56,7 @@ btser    = btstd./sqrt(size(cbt,2));
 %nbr_cbsd = nanstd(nbr_cbt,0,3);                     % global std.dev
 %nbr_absd = nanstd(nbr_abt,0,3);
 %nbr_dbsd = nanstd(nbr_dbt,0,3);
- whos *bm bias_* nbr_*
+ whos *bt bias* *bm bias_* nbr_*
 
 % --------------- neighbour stats at SNOs ----------------------------
 
@@ -163,6 +162,105 @@ fprintf(1,'\n');
 q.qn = qcd;
   whos q
 
+% ----------------------------------------------------------------------
+%                   SUBSET by CrIS FOV 
+% ----------------------------------------------------------------------
+disp('working on CrIS FOV subsets');
+clear xFOV nFOV fov;
+for i=1:9 xFOV{i} = find(s.cfov(s.iok) == i); end
+for i = 1:9 nFOV(i) = numel(xFOV{i}); end
+rc_tmp = s.rc(:,s.iok);
+rd_tmp = s.rd(:,s.iok);
+for i=1:9
+  fov(i).cbt = real( rad2bt(s.fc(s.cchns), rc_tmp(:, xFOV{i})) );
+  fov(i).dbt = real( rad2bt(s.fd(s.dchns), rd_tmp(:, xFOV{i})) );
+end
+clear rc_tmp rd_tmp;
+%
+btbins  = [190.0: 1.0: 330]; btcens = [190.5: 1.0: 329.5];
+
+for i=1:9
+  for j=1:length(s.cchns) fov(i).pdf(j,:) = histcounts(fov(i).cbt(j,:), btbins); end
+end
+
+for i=1:9
+  fov(i).mbias = nanmean(fov(i).cbt - fov(i).dbt, 2);
+end
+
+junk = s.rd(:,s.iok) - s.rc(:,s.iok);
+for i = 1:9
+  radstd  = nanstd(junk(:,xFOV{i}),0,2 );
+   cdbm    = 0.5*( nanmean(dbt(:,xFOV{i}),2) + nanmean(cbt(:,xFOV{i}),2) );
+   mdr     = 1E-3*( 1./drdbt(fd,cdbm) );
+  btstd    = mdr.*radstd;
+  fov(i).btser = btstd./sqrt(numel(xFOV{i}));
+end
+clear junk;
+
+%  -------- Quantile Analysis ---------
+for i=1:9
+  qn_c = quantile(fov(i).cbt,s.prf,2);
+  qn_d = quantile(fov(i).dbt,s.prf,2);
+  fov(i).qn = qn_c; % (qn_c + qn_d)/2.0;
+end
+disp('computing quantiles for each FOV - will take a while!')
+for i=1:9 fov(i).binsz = []; fov(i).btbias = []; fov(i).btstd = []; fov(i).btser = []; end
+for i=1:9
+  xrd = s.rd(:,xFOV{i});
+  xrc = s.rc(:,xFOV{i});
+for j = 1:size(cbt,1)
+  sbins = fov(i).qn(j,:);
+  [dbin dbinStd dbinN dbinInd] = ...
+      Math_bin(fov(i).dbt(j,:),fov(i).cbt(j,:) - fov(i).dbt(j,:),sbins); 
+  [cbin cbinStd cbinN cbinInd] = ...
+      Math_bin(fov(i).cbt(j,:),fov(i).cbt(j,:) - fov(i).dbt(j,:),sbins);
+  for k = 1:length(dbin)                                                       
+    ubinInd(k,:) = {union(dbinInd{k},cbinInd{k})};                  
+    fov(i).binsz(j,k)  = length(ubinInd{k});
+    fov(i).btbias(j,k) = nanmean(fov(i).dbt(j,ubinInd{k}) - fov(i).cbt(j,ubinInd{k}) );
+
+    radstd  = nanstd( xrd(j,ubinInd{k}) - xrc(j,ubinInd{k}) );   % s.rc
+    cdbm    = 0.5*( nanmean(fov(i).dbt(j,ubinInd{k})) + ...
+                    nanmean(fov(i).cbt(j,ubinInd{k})) );
+      mdr      = 1E-3*( 1./drdbt(fd(j),cdbm) );
+    fov(i).btstd(j,k)   = mdr.*radstd;  
+    fov(i).btser(j,k)   = fov(i).btstd(j,k)./sqrt(fov(i).binsz(j,k));
+
+  end
+end
+fprintf(1,'.')
+end
+
+% ----------------- choose which variables to return ------------
+r.src   = s.src;
+r.res   = s.res;
+%r.vers  = vers;
+r.band  = band;
+r.sdate = s.sdate;     r.edate = s.edate;
+r.nsam  = size(dbt,2);
+r.fi    = s.fi;         r.fc = s.fc;         r.fd = s.fd;
+r.ichns = s.ichns;   r.cchns = s.cchns;   r.dchns = s.dchns;
+r.cbt      = cbt;
+r.btbias   = single(btbias);
+r.ibm = ibm;  r.cbm = cbm;  r.dbm = dbm;
+r.bias_mn  = bias_mn;  r.bias_sd = bias_sd; r.btser = btser;  r.btstd = btstd;
+r.fov      = fov;
+r.pdf_ibt  = pdf_ibt;
+r.pdf_cbt  = pdf_cbt;
+r.pdf_dbt  = pdf_dbt;
+r.btbins   = btbins;      r.btcens  = btcens;
+r.pdf_bias = pdf_bias;
+r.biasbins = biasbins;  r.biascens = biascens;
+r.q        = q;
+
+%
+
+
+disp('completed and return structure r');
+
+
+
+%{
 % ------------------- Hot Bin Investigation ----------------------
 btbins  = [190.0: 0.2: 330]; btcens = [190.1: 0.2: 329.9];
 ich = 12;
@@ -199,7 +297,8 @@ figure(5);clf;semilogy(btcens, pdf_dbt_bin290(ich,:),'.-', btcens, pdf_cbt_bin29
 
 figure(6);clf;semilogy(btcens, pdf_nbr_cbt_bin304(ich,:),'.-');xlim([275 315]);grid on;hold on;
   semilogy(btcens, pdf_nbr_cbt_bin290(ich,:),'.-')
-
+%}
+%{
 % ----------------------------------------------------------------
 %                     PLOTTING SECTION 
 % ----------------------------------------------------------------
@@ -309,4 +408,4 @@ figure(1);clf;simplemap(s.cLat(uHot305), s.cLon(uHot305), dbt(uHot305)');
 %drse  = sqrt((a.gddrs.^2 + a.gcdrs.^2))/sqrt(sum(a.nSam));
 %dbse  = mdr.*drse';
     bias_mn  = nanmean(cbt - dbt,2);
-
+%}

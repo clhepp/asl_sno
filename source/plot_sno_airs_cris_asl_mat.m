@@ -23,7 +23,7 @@ if(strcmp(res,'LOW'))  CR='LR'; end
 phome = ['/home/chepplew/projects/sno/airs_cris/' CR '/figs/'];
 
 xyr  = year(datetime(datenum(r.sdate),'convertfrom','datenum'));
-cyr  =num2str(xyr);
+cyr  = num2str(xyr);
 xmn  = month(datetime(datenum(r.sdate),'convertfrom','datenum'),'shortname');
 xmn  = lower(cell2mat(xmn));
 part = 'a';
@@ -136,7 +136,7 @@ fh4=figure(4);clf;set(fh4,'Resize','Off');set(fh4,'Position',fh4.Position+[0 0 2
   xlabel('wavenumber cm^{-1}');ylabel('CcIS minus AIRS (K)');
 % with FOV 5 as the reference
   h3=subplot(223);hold on;
-  for i=[1:4 6:9] plot(r.fc,r.fov(i).mbias - r.fov(5).mbias,'-'); end
+  for i=[1:4 6:9] plot(r.fc,r.fov(i).mbias - r.fov(5).mbias,'-','color',cc(i,:)); end
   grid on; axis([wnbnd(1) wnbnd(2) -0.4 0.4]); 
   legend('1','2','3','4','6','7','8','9','Location','eastOutside');
   xlabel('wavenumber cm^{-1}');ylabel('dBT (K)');

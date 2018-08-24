@@ -66,6 +66,7 @@ if(nargin ~= 5) error('Please enter all 5 input arguments'); return; end
 cris_res = upper(cris_res);
 if(strcmp(cris_res,'HIGH')) CR='HR'; ncc=2223; end
 if(strcmp(cris_res,'LOW'))  CR='LR'; ncc=1317; end
+s.res = lower(cris_res);
 
 % Check mission numbers
 if(length(src) ~=2) error('Need IASI and CRIS mission numbers'); return; end
@@ -76,6 +77,7 @@ if(src(1) == 1) IX = '';  end
 if(src(1) == 2) IX = '2'; end
 if(src(2) == 1) CX = '';  end
 if(src(2) == 2) CX = '2'; end
+s.src = src;
 
 % Process and check the date strings
 posYrs = [2002:2018];
@@ -99,6 +101,8 @@ cYr2   = edate(1:4);     cMn1 = edate(6:7);     cDy1 = edate(9:10);
 jdy1   = datenum(sdate)-datenum(junk);  clear junk;           % needed for data directory
   junk = sprintf('%4d/%02d/%02d',nYr2-1,12,31);
 jdy2   = datenum(edate)-datenum(junk);  clear junk;           % needed for data directory
+s.sdate = sdate;
+s.edate = edate;
 
 % Check channel numbers entered correctly
 if(length(xchns) > 20 || length(xchns) < 1 ) fprintf(1,'Wrong number channels\n'); end
@@ -132,6 +136,8 @@ end
 disp(['Source dir: ' dp]);
 fprintf(1,'Loading %d SNO files from: %s to %s\n',(ifn2-ifn1+1),snoLst(ifn1).name, ...
         snoLst(ifn2).name);
+s.dp    = dp;
+s.flist = snoLst(ifn1:ifn2);
 
 % ********************* load up SNO data *****************************
 s.tdiff = [];    s.rc = [];    s.ri = [];      s.rd = [];  s.itime = [];  s.ctime = []; 
