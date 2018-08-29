@@ -1,4 +1,4 @@
-function [s] = load_sno_airs_iasi_asl_mat_v2(sdate, edate, xchns, iasi)
+function [s] = load_sno_airs_iasi_asl_mat_v2(sdate, edate, xchns, src)
 %
 % function load_sno_airs_iasi_asl_mat() loads up radiances for a selected number
 %   of channels, specified by AIRS channel number, from the ASL SNO mat files 
@@ -12,8 +12,9 @@ function [s] = load_sno_airs_iasi_asl_mat_v2(sdate, edate, xchns, iasi)
 %           3. xchns: numeric IDs of AIRS L1C channels to load. 
 %             eg [403 499 737 884 905 998 1021 1297] or [566:824];
 %                [   1:1269] (645  - 1100) cm-1
-%                [1270:2160] (1100 - 1615) cm-1
-%           4. iasi: IASI mission number [1 or 2] IASI-1 or IASI-2
+%                [1270:2162] (1100 - 1615) cm-1
+%                [2163:2645] (2181 - 2665) cm-1.
+%           4. src: IASI mission number [1 or 2] IASI-1 or IASI-2
 %
 % Output:  structure of arrays. 
 %             s: the SNO single fields.
@@ -38,7 +39,7 @@ function [s] = load_sno_airs_iasi_asl_mat_v2(sdate, edate, xchns, iasi)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-cd /home/chepplew/gitLib/asl_sno/run
+cd /home/chepplew/projects/sno/airs_iasi/
 
 addpath /asl/packages/airs_decon/source             % hamm_app.m
 addpath /asl/matlib/aslutil                         % rad2bt.m
@@ -75,15 +76,18 @@ cYr2   = edate(1:4);     cMn2 = edate(6:7);     cDy2 = sdate(9:10);
 jdy1   = datenum(sdate)-datenum(junk);  clear junk;           % needed for data directory
   junk = sprintf('%4d/%02d/%02d',nYr2-1,12,31);
 jdy2   = datenum(edate)-datenum(junk);  clear junk;           % needed for data directory
+s.sdate = sdate;
+s.edate = edate;
 
 % Check channel numbers entered correctly
 if(length(xchns) > 20 || length(xchns) < 1 ) fprintf(1,'Wrong number channels\n'); end
 if(min(xchns) < 1 || max(xchns) > 1317 ) fprintf(1,'Wrong channel numbers used\n'); end
 
 % Check IASI Mission source
-if(~ismember(iasi,[1,2])) error('Invalid IASAI mission number [1 or 2]'); return; end
-if(iasi == 1) IX = '';  IR = 'M02'; end
-if(iasi == 2) IX = '2'; IR = 'M01'; end
+if(~ismember(src,[1,2])) error('Invalid IASAI mission number [1 or 2]'); return; end
+if(src == 1) IX = '';  IR = 'M02'; end
+if(src == 2) IX = '2'; IR = 'M01'; end
+s.src = src;
 
 % load IASI and AIRS channels & good AIRS channels (nig) to use, & bad (nib) to avoid
 load('/home/chepplew/projects/iasi/f_iasi.mat');               % f_iasi [8641 x 1]
@@ -127,6 +131,8 @@ end
 disp(['Source dir: ' dp]);
 fprintf(1,'Loading %d SNO files from: %s to %s\n',(ifn2-ifn1+1),snoLst(ifn1).name, ...
         snoLst(ifn2).name);
+s.dp    = dp;
+s.flist = snoLst(ifn1:ifn2);
 
 % -------------------------------------------------------------------------
 s.tdiff = [];    s.ra = [];    s.ri = [];    s.ri2a = [];  s.itime = [];  s.atime = []; 
@@ -139,7 +145,8 @@ for ifn = ifn1:ifn2;
   if( ismember('ri', {vars.name}) & ismember('ra', {vars.name}) & ...
       ismember('ri2a', {vars.name})  )  
     load(strcat(dp, snoLst(ifn).name));
-    if(size(ri,1) == 8461 & size(ra,1) == 2645 & size(ri2a,1) == 2645) 
+    if(size(ri,1) == 8461 & size(ra,1) == 2645 & size(ri2a,1) == 2645)
+    if(size(ra,2) ~= size(ri2a,2)) disp(['unequal samples: ' num2str(ifn)]); end
       s.ra      = [s.ra,   ra(achns,:)];                   % 
       s.ri      = [s.ri,   ri(ichns,:)];      clear rc_ham;
       s.ri2a    = [s.ri2a, ri2a(achns,:)];              %
@@ -199,6 +206,11 @@ clear gx n nn ux aibias;
 % combine iqual and r6s
 s.ibad   = sort(unique([ibad; sbad']));
 s.iok    = setdiff(1:psz, s.ibad);
+
+
+% ******************* END of routine ***********************
+
+
 
 %{
 % find highest l1cProc value for each channel 

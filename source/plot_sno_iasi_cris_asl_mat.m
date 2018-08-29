@@ -39,6 +39,8 @@ cc=fovcolors;       % Howard's 9 line colors uas as: plot(...,'-','color',cc(i,:
 pfnam_pref = ['sno_i' num2str(src(1)) 'c' num2str(src(2)) '_' lower(CR) '_' lower(band) ...
               '_' cyr smn '-' emn '_'];
 
+wnbnd = [floor(fc(1)-10) ceil(fc(end)+10)];
+
 figure(1);clf;plot(fi, r.ibm,'-', fc, r.cbm,'-', fd, r.dbm,'-');
   grid on;legend('IASI','CrIS','I2C','Location','southEast');
 % ------------ Maps ----------------------
@@ -72,7 +74,8 @@ figure(1);clf;plot(s.fi(s.ichns),r.ibm,'-',s.fc(s.cchns),r.cbm,'-',s.fd(s.dchns)
   %saveas(gcf,[phome '2017_iasi2_cris1_mean_bt_lw_spectrum.png'],'png')
 
 % ------------ Maps ----------------------
-title2=['ASL IC.' num2str(src) ' SNO ' r.sdate ' to ' r.edate ' ' band ' overview'];
+title2=['ASL I.' num2str(src(1)) 'C.' num2str(src(2)) ' SNO ' r.sdate ' to ' r.edate ' ' ...
+         band ' overview'];
 fh2=figure(2);clf;set(gcf,'Resize','Off'); set(gcf,'Position',fh2.Position+[0 0 420 240]);
   subplot(2,2,1); simplemap(s.clat, s.clon, s.tdiff*24*60);title('Delay IASI-CrIS mins');
   subplot(2,2,2); simplemap(s.clat, s.clon, s.dist); title('Separation deg');
@@ -88,8 +91,15 @@ fh2=figure(2);clf;set(gcf,'Resize','Off'); set(gcf,'Position',fh2.Position+[0 0 
 
 
 % ------------ Histograms -----------------
+lat_pdf = histcounts(s.clat,[-90:2:90]);
+figure(3);clf;plot([-89:2:89], lat_pdf,'.-')
+   xlabel('latitude');ylabel('population');title('AIRS:CrIS SNO density vs latitude')
+   grid on;
+   %aslprint([phome pfnam_pref '_pop_vs_lat.png'])
+   
 pc_diff_pdf = 100.*(r.pdf_cbt - r.pdf_dbt)./r.pdf_cbt;
-title3=['ASL IC.' num2str(src) ' SNO ' r.sdate ' to ' r.edate ' ' wvn ' cm^{-1} pdfs ' vers];
+title3=['ASL I.' num2str(src(1)) ':C.' num2str(src(2)) ' SNO ' r.sdate ' to ' r.edate ' ' wvn ...
+        ' cm^{-1} pdfs ' vers];
 fh3=figure(3);clf;set(gcf,'Resize','off');set(fh3,'Position',fh3.Position+[0 0 420 240]);
   h1 = subplot(221);plot(r.btcens,r.pdf_cbt(cch,:),'.-', r.btcens,r.pdf_dbt(dch,:),'.-',...
     r.btcens,r.pdf_ibt(ich,:),'-'); grid on;xlim([190 330]);
@@ -136,7 +146,8 @@ figure(2);clf;plot(btcens, (pdf_sim_cbt(4,:) - pdf_cbt(4,:))./pdf_cbt(4,:),'.-')
 figure(4);clf;plot(fd,r.bias_mn,'-');
 %
 wnbnd = [floor(fc(1)-10) ceil(fc(end)+10)];
-title4=['IC.' num2str(src) ' SNO ' r.sdate ' to ' r.edate ' Mean Bias ' band ' ' vers ''];
+title4=['ASL I.' num2str(src(1)) ':C.' num2str(src(2)) ' SNO ' r.sdate ' to ' r.edate ...
+        ' Mean Bias ' band ' ' vers ''];
 fh4=figure(4);clf;set(fh4,'Resize','Off');set(fh4,'Position',fh4.Position+[0 0 280 210]);
   h1=subplot(221);plot(fd,r.bias_mn,'-', fd,10*r.btser,'-');
   axis([wnbnd(1) wnbnd(2) -0.8 0.8]);grid on;
@@ -147,7 +158,7 @@ fh4=figure(4);clf;set(fh4,'Resize','Off');set(fh4,'Position',fh4.Position+[0 0 2
   axis([wnbnd(1) wnbnd(2) -0.8 0.8]);grid on;
   legend('1','2','3','4','5','6','7','8','9','Location','eastOutside',...
          'orientation','vertical');
-  xlabel('wavenumber cm^{-1}');ylabel('CcIS minus IASI (K)');
+  xlabel('wavenumber cm^{-1}');ylabel('CrIS minus IASI (K)');
 % with FOV 5 as the reference
   h3=subplot(223);hold on;
   for i=[1:4 6:9] plot(fc,r.fov(i).mbias - r.fov(5).mbias,'-','color',cc(i,:)); end
@@ -161,10 +172,10 @@ fh4=figure(4);clf;set(fh4,'Resize','Off');set(fh4,'Position',fh4.Position+[0 0 2
 
 
 %{  
-% Double difference (must have loaded two sets: ac1_fov and ac2_fov)
-title6=[' SNO dble diff ' r.sdate ' to ' r.edate ' Mean Bias ' band ' ' vers ''];
+% Double difference (must have loaded two sets: r1: I:C.1, r2: I:C.2. )
+title6=[' SNO dble diff ' r1.sdate ' to ' r1.edate ' Mean Bias ' band ' ' vers ''];
 figure(6);clf;hold on; 
-  for i=1:9 plot(fc, r2.fov(i).mbias - r1.fov(i).mbias,'-','color',cc(i,:));end
+  for i=1:9 plot(fc, r1.fov(i).mbias - r2.fov(i).mbias,'-','color',cc(i,:));end
   axis([wnbnd(1) wnbnd(2) -0.4 0.4]);grid on;
     legend('1','2','3','4','5','6','7','8','9',...
            'Location','eastOutside','orientation','vertical');

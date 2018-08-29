@@ -24,17 +24,23 @@ phome = ['/home/chepplew/projects/sno/airs_cris/' CR '/figs/'];
 
 xyr  = year(datetime(datenum(r.sdate),'convertfrom','datenum'));
 cyr  = num2str(xyr);
-xmn  = month(datetime(datenum(r.sdate),'convertfrom','datenum'),'shortname');
-xmn  = lower(cell2mat(xmn));
-part = 'a';
+smn  = month(datetime(datenum(r.sdate),'convertfrom','datenum'),'shortname');
+smn  = lower(cell2mat(smn));
+emn  = month(datetime(datenum(r.edate),'convertfrom','datenum'),'shortname');
+emn  = lower(cell2mat(emn));
+part = '';
+
+% Initialization
+cc=fovcolors;       % Howard's 9 line colors uas as: plot(...,'-','color',cc(i,:))
+
+pfnam_pref = ['sno_ac' num2str(src) '_' lower(CR) '_' lower(band) ...
+              '_' cyr smn '-' emn '_'];
+
+wnbnd = [floor(fc(1)-10) ceil(fc(end)+10)];
 
 % ----------------------------------------------------------------
 %                     PLOTTING SECTION 
 % ----------------------------------------------------------------
-%
-cc=fovcolors;       % Howard's 9 line colors uas as: plot(...,'-','color',cc(i,:))
-
-pfnam_pref = ['sno_ac' num2str(src) '_' lower(CR) '_' lower(band) '_' cyr xmn part '_'];
 
 figure(1);clf;plot(r.fa, r.abm,'-', r.fc, r.cbm,'-', r.fd, r.dbm,'-');
   grid on;legend('AIRS','CrIS','A2C','Location','southEast');
@@ -148,13 +154,13 @@ fh4=figure(4);clf;set(fh4,'Resize','Off');set(fh4,'Position',fh4.Position+[0 0 2
 %{  
 % Double difference (must have loaded two sets: ac1_fov and ac2_fov)
 figure(4);clf;hold on; 
-  for i=1:9 plot(fc, r3.fov(i).mbias - r1.fov(i).mbias,'-','color',cc(i,:));end
+  for i=1:9 plot(fc, r.fov(i).mbias - r2.fov(i).mbias,'-','color',cc(i,:));end
   axis([wnbnd(1) wnbnd(2) -0.4 0.4]);grid on;
     legend('1','2','3','4','5','6','7','8','9',...
-           'Location','north','orientation','horizontal');
+           'Location','eastOutside'); %,'orientation','horizontal');
   xlabel('wavenumber cm^{-1}');ylabel('A:CrIS.1 minus A:CrIS.2 (K)');
   title([{'2018Jan SNO mean bias of'} {'A:C1 minus A:C2.a2.test1 vs FOV MW'}]);
-  %saveas(gcf, [phome '2018Jan_ac1_ac2_sno_mean_bias_dble_diff_lw.png'],'png')
+  %saveas(gcf, [phome 'sno_ac1_ac2_dble_diff_lr_lw_2018feb-jun.fig'],'fig')
 
 nf4 = figure(4);clf;  set(gcf,'Resize','off');
 set(nf4,'Position',nf4.Position+[0,0,280 210]);
