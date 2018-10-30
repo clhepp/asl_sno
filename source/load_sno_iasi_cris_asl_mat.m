@@ -116,6 +116,8 @@ load('/home/chepplew/projects/cris/cris_freq_2grd.mat'); fc = vchan;
 %[zi ichns] = seq_match(fc(xchns),f_iasi);
 ichns = [find(f_iasi >= fc(xchns(1)),1): find(f_iasi >= fc(xchns(end)),1)]; 
 cchns = xchns;
+% if all channels are requested - load all IASI (NB beware of memory demand)
+if(length(xchns) == 1317) ichns = [1:8461]; end
    
 % ************* get list and subset date range  ********************
 

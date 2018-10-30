@@ -87,7 +87,7 @@ fh2=figure(2);clf;set(gcf,'Resize','Off'); set(gcf,'Position',fh2.Position+[0 0 
   title('SNO Bias IASI minus CrIS (K)');
   annotation('textbox', [0 0.9 1 0.1], 'String', title2, 'fontSize',16,...
     'EdgeColor', 'none','HorizontalAlignment', 'center')
-  %saveas(gcf,[phome 'maps'],'');
+  %saveas(gcf,[phome pfnam_pref 'maps.fig'],'fig');
 
 
 % ------------ Histograms -----------------

@@ -1,9 +1,9 @@
 % plot_sno_airs_iasi_asl_mat.m
 
 % first run:  [s] = load_sno_airs_iasi_asl_mat(sdate, edate, xchns, src);
-
+% and          r  = stats_sno_airs_iasi_asl_mat(s,<band>);
 % plot options
-
+%
 
 addpath /home/chepplew/gitLib/asl_sno/source    
 
@@ -139,19 +139,20 @@ fh4=figure(4);clf;set(fh4,'Resize','Off');set(fh4,'Position',fh4.Position+[0 0 2
 
 %{  
 % Double difference (must have loaded two sets: r1: A:I.1, r2: A:I.2. )
-title6=[' SNO dble diff ' r1.sdate ' to ' r1.edate ' Mean Bias ' band ' ' vers ''];
+title6=['A:I SNO dble diff ' r1.sdate ' to ' r1.edate ' Mean Bias ' band ' ' vers ''];
 figure(6);clf;hold on; 
-  for i=1:9 plot(fc, r1.fov(i).mbias - r2.fov(i).mbias,'-','color',cc(i,:));end
+  for i=1:4 plot(fa, r1.fov(i).mbias - r2.fov(i).mbias,'-','color',cc(i,:));end
+  plot(fa, r1.bias_mn -  r2.bias_mn,'k-')
   axis([wnbnd(1) wnbnd(2) -0.4 0.4]);grid on;
-    legend('1','2','3','4','5','6','7','8','9',...
-           'Location','eastOutside','orientation','vertical');
-  xlabel('wavenumber cm^{-1}');ylabel('I.1:C.1 minus I.1:C.2 (K)');grid on;
+    legend('1','2','3','4','all',...
+           'Location','best');
+  xlabel('wavenumber cm^{-1}');ylabel('A:I.1 minus A:I.2 (K)');grid on;
   title(title6);
 
   annotation('textbox', [0 0.9 1 0.1], 'String', title4, 'fontSize',16,...
     'EdgeColor', 'none','HorizontalAlignment', 'center')
 
-  %saveas(gcf, [phome 'sno_i1c1_i1c2_dble_diff_lr_mw_2018feb-jun.fig'],'fig')
+  %saveas(gcf, [phome 'sno_ai1_ai2_dble_diff_lw_2018jan-may.fig'],'fig')
 
 nf4 = figure(4);clf;  set(gcf,'Resize','off');
 set(nf4,'Position',nf4.Position+[0,0,280 210]);
@@ -216,4 +217,27 @@ figure(1);clf;simplemap(s.cLat(uHot305), s.cLon(uHot305), dbt(uHot305)');
 %mdr   = 1E-3*(1./drdbt(fd,btm') );
 %drse  = sqrt((a.gddrs.^2 + a.gcdrs.^2))/sqrt(sum(a.nSam));
 %dbse  = mdr.*drse';
+%{
+% remove fake, dead and popping channels
+ig = a2c_good_chans(fairs);          % fairs = L1c set: 2645
 
+fa_good = fairs(ig.all);
+[ixx ixy] = seq_match(fd, fa_good);
+
+
+f_fill   = fairs(ig.fill);
+fg       = setdiff(fairs, f_fill);
+ig_lw    = seq_match(fd,fg);
+fg_lw    = fd(ig_lw);
+
+figure(1);clf;plot(fg_lw, r.bias_mn(ig_lw),'-')
+
+ig_lw  = seq_match(fd, sort(unique([fairs(ig.fill); fairs(ig.edgechans); fairs(ig.dead); ...
+         fairs(ig.pop); fairs(ig.noise)])) );
+rbg_lw = r.bias_mn;
+rbg_lw(ig_lw) = NaN;
+figure(1);clf;plot(fd, rbg_lw,'-');xlim([640 1110])
+
+
+
+%}

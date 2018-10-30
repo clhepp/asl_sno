@@ -97,7 +97,11 @@ load('/home/chepplew/projects/airs/master_nig_01_2009.mat');   % nig [1 x 1535]
 junk = ismember([1:2378], nig);  nib = find(junk == 0);  clear junk;
 
 % Get over-lapping IASI channels
-[zi ichns] = seq_match(f2645(xchns),f_iasi);
+% Get IASI channels that cover the AIRS range
+%[zi ichns] = seq_match(f2645(xchns),f_iasi);
+ichns = [find(f_iasi >= f2645(xchns(1)),1):find(f_iasi >= f2645(xchns(end)),1)-1];
+% if all channels are required (DON'T RUN OUT OF MEMORY!) then:
+if(length(xchns) == 2645) ichns = [1:8461]; end
    
 % Screen the channel selection for AIRS bad channels and report any:
 achns  = xchns';

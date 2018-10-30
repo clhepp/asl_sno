@@ -189,7 +189,8 @@ end
   
 % Get the AIRS channels to load
 achns = [find(f2645 >= fcris(xchns(1)),1):find(f2645 >= fcris(xchns(end)),1)-1];
-%achns = [1260:2162]; % use with MW band if needed: 
+% if all channels are requested load all AIRS (NB beware of memory load) 
+if(length(xchns) == 1305) achns = [1:2645]; end
 cWavs  = fcris(cchns);
 aWavs  = f2645(achns);
 
@@ -223,6 +224,7 @@ for ifn = ifn1:1:ifn2;
       s.cTime   = [s.cTime; sno.cTime];
       s.aLat    = [s.aLat;  sno.aLat];         s.aLon = [s.aLon;  sno.aLon];
       s.cLat    = [s.cLat;  sno.cLat];         s.cLon = [s.cLon;  sno.cLon];
+      s.alnfr   = [s.alnfr; sno.alnfrac];
       s.cFov    = [s.cFov;  sno.cFov];
       s.tdiff   = [s.tdiff; sno.tdiff];                       %
       s.dist    = [s.dist;  sno.dist];

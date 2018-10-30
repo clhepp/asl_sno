@@ -1,15 +1,25 @@
-function plot_sno_airs_cris_asl_mat(r,s)
+function plot_sno_airs_cris_asl_mat(r,s,vis)
 %function: plot_sno_airs_cris_asl_mat(r)
 %
 % plot_sno_airs_cris_asl_mat.m
 %
 % first run:   s  = load_sno_airs_cris_asl_mat(sdate1, sdate2, xchns, src);
 % then run:    r  = stats_sno_airs_cris_asl_mat(s);
-%
+% vis: [0,1] 0: do not display plots to screen, 1: display plots.
 %
 % plot options
 % set(gcf,'Resize','off');
 
+% Check number of input arguments
+if(nargin ~= 3) error('Please enter all 3 input arguments'); return; end
+if(~ismember(vis,[0 1])) error('vis must be 0 or 1'); return; end
+if(vis == 0) VIS=false; end
+if(vis == 1) VIS=true;  end
+
+% close any open figures from previous runs
+close all;
+
+% copy over useful values.
 fa   = r.fa;
 fc   = r.fc;
 fd   = r.fd;
@@ -20,6 +30,10 @@ band = r.band;   %  LW, MW or SW
 
 if(strcmp(res,'HIGH')) CR='HR'; end
 if(strcmp(res,'LOW'))  CR='LR'; end
+if(src == 1)  SR = ''; end
+if(src == 2)  SR = '2'; end
+
+% Initialization
 phome = ['/home/chepplew/projects/sno/airs_cris/' CR '/figs/'];
 
 xyr  = year(datetime(datenum(r.sdate),'convertfrom','datenum'));
@@ -28,21 +42,28 @@ smn  = month(datetime(datenum(r.sdate),'convertfrom','datenum'),'shortname');
 smn  = lower(cell2mat(smn));
 emn  = month(datetime(datenum(r.edate),'convertfrom','datenum'),'shortname');
 emn  = lower(cell2mat(emn));
-part = '';
+part = 'a';
 
-% Initialization
 cc=fovcolors;       % Howard's 9 line colors uas as: plot(...,'-','color',cc(i,:))
 
+if(emn ~= smn)
 pfnam_pref = ['sno_ac' num2str(src) '_' lower(CR) '_' lower(band) ...
               '_' cyr smn '-' emn '_'];
+end
+if(emn == smn)
+pfnam_pref = ['sno_ac' num2str(src) '_' lower(CR) '_' lower(band) ...
+              '_' cyr smn part '_'];
+end
+
 
 wnbnd = [floor(fc(1)-10) ceil(fc(end)+10)];
 
 % ----------------------------------------------------------------
 %                     PLOTTING SECTION 
 % ----------------------------------------------------------------
-
-figure(1);clf;plot(r.fa, r.abm,'-', r.fc, r.cbm,'-', r.fd, r.dbm,'-');
+if(~VIS) fh1 = figure('visible','off'); end
+if(VIS) fh1=figure(1);clf; end
+plot(r.fa, r.abm,'-', r.fc, r.cbm,'-', r.fd, r.dbm,'-');
   grid on;legend('AIRS','CrIS','A2C','Location','southEast');
 % ------------ Maps ----------------------
 if(strcmp(band,'LW'))
@@ -58,13 +79,15 @@ if(strcmp(band,'MW'))
   wvn='1231';
 end
 if(strcmp(band,'SW'))
-  ach = find(r.fa>2410,1); 
-  cch = find(r.fc>2410,1); 
-  dch = find(r.fd>2410,1);
-  wvn='2410';
+  ach = find(r.fa>2360,1); % was 2410
+  cch = find(r.fc>2360,1); 
+  dch = find(r.fd>2360,1);
+  wvn='2360';    % was '2410';
 end
 title2=['ASL AC.' num2str(src) ' SNO ' r.sdate ' to ' r.edate ' ' band ' overview'];
-fh2=figure(2);clf;set(gcf,'Resize','Off'); set(gcf,'Position',fh2.Position+[0 0 420 240]);
+if(~VIS) fh2 = figure('visible','off'); end
+if(VIS)  fh2 = figure(2);clf; end
+ set(gcf,'Resize','Off'); set(gcf,'Position',fh2.Position+[0 0 420 240]);
   subplot(2,2,1); simplemap(s.cLat, s.cLon, s.tdiff*24*60);title('Delay AIRS-CrIS mins');
   subplot(2,2,2); simplemap(s.cLat, s.cLon, s.dist); title('Separation deg');
 
@@ -75,12 +98,15 @@ fh2=figure(2);clf;set(gcf,'Resize','Off'); set(gcf,'Position',fh2.Position+[0 0 
   title('SNO Bias AIRS minus CrIS (K)');
   annotation('textbox', [0 0.9 1 0.1], 'String', title2, 'fontSize',16,...
     'EdgeColor', 'none','HorizontalAlignment', 'center')
-  %saveas(gcf,[phome 'maps'],'');
+  %saveas(fh2,[phome pfnam_pref 'maps.fig'],'fig');
+  %saveas(fh2,[phome pfnam_pref 'maps.png'],'png');
   
 % ------------ Histograms -----------------
 pc_diff_pdf = 100.*(r.pdf_cbt - r.pdf_dbt)./r.pdf_cbt;
 title3=['ASL AC.' num2str(src) ' SNO ' r.sdate ' to ' r.edate ' ' wvn ' cm^{-1} pdfs ' vers];
-fh3=figure(3);clf;set(gcf,'Resize','off');set(fh3,'Position',fh3.Position+[0 0 420 240]);
+if(~VIS) fh3 = figure('visible','off'); end
+if(VIS) fh3=figure(3);clf; end
+  set(gcf,'Resize','off');set(fh3,'Position',fh3.Position+[0 0 420 240]);
   h1 = subplot(221);plot(r.btcens,r.pdf_cbt(cch,:),'.-', r.btcens,r.pdf_dbt(dch,:),'.-',...
     r.btcens,r.pdf_abt(ach,:),'-'); grid on;xlim([190 330]);
     xlabel('Scene BT bin (K)');ylabel('Number in bin');legend('CrIS','AIRStoCrIS','AIRS')
@@ -96,7 +122,8 @@ fh3=figure(3);clf;set(gcf,'Resize','off');set(fh3,'Position',fh3.Position+[0 0 4
     title('PDF difference')
   annotation('textbox', [0 0.9 1 0.1], 'String', title3, 'fontSize',16,...
     'EdgeColor', 'none','HorizontalAlignment', 'center')
-  %saveas(gcf,[phome  pfnam_pref 'pdfs.fig'],'fig');
+  %saveas(fh3,[phome  pfnam_pref 'pdfs.fig'],'fig');
+  %saveas(fh3,[phome  pfnam_pref 'pdfs.png'],'png');
   
 %figure(2);clf;plot(btcens,pdf_sim_cbt(ich,:),'.-', btcens,pdf_dbt(ich,:),'.-'); grid on;
 
@@ -125,11 +152,13 @@ figure(2);clf;plot(btcens, (pdf_sim_cbt(4,:) - pdf_cbt(4,:))./pdf_cbt(4,:),'.-')
    title('Fraction difference AIRS and CrIS neighbors vs SNO'); 
 %}
 % ------------ Simple Bias Stats -------------------------
-figure(4);clf;plot(r.fd,r.bias_mn,'-');
+%figure(4);clf;plot(r.fd,r.bias_mn,'-');
 %
 wnbnd = [floor(r.fc(1)-10) ceil(r.fc(end)+10)];
 title4=['AC.' num2str(src) ' SNO ' r.sdate ' to ' r.edate ' Mean Bias ' band ' ' vers ''];
-fh4=figure(4);clf;set(fh4,'Resize','Off');set(fh4,'Position',fh4.Position+[0 0 280 210]);
+if(~VIS) fh4 = figure('visible','off'); end
+if(VIS)  fh4 = figure(4);clf; end
+  set(fh4,'Resize','Off');set(fh4,'Position',fh4.Position+[0 0 280 210]);
   h1=subplot(221);plot(r.fc,r.bias_mn,'-', r.fc,10*r.btser,'-');  
   axis([wnbnd(1) wnbnd(2) -0.8 0.8]);grid on;
   legend(['CrIS.' num2str(src) ' - AIRS','10*std.err.']);
@@ -149,7 +178,8 @@ fh4=figure(4);clf;set(fh4,'Resize','Off');set(fh4,'Position',fh4.Position+[0 0 2
   title('C minus A rel. FOV 5')
   annotation('textbox', [0 0.9 1 0.1], 'String', title4, 'fontSize',16,...
     'EdgeColor', 'none','HorizontalAlignment', 'center')
-  %saveas(gcf,[phome pfnam_pref 'mean_bias.fig'],'fig');
+  %saveas(fh4,[phome pfnam_pref 'mean_bias.fig'],'fig');
+  %saveas(fh4,[phome pfnam_pref 'mean_bias.png'],'png');
 
 %{  
 % Double difference (must have loaded two sets: ac1_fov and ac2_fov)
@@ -200,12 +230,11 @@ clear pdf_*
 if(strcmp(band,'LW')) ich = find(fc > 900,1); end % LW(713) = 402;   % or 16
 if(strcmp(band,'MW')) ich = find(fc > 1231,1); end % MW 16
 title5 = ['ASL AC.' num2str(src) ' SNO ' r.sdate ' to ' r.edate ' Quantiles ' wvn ' wn Bias'];
-fh5=figure(5);clf;set(fh5,'Resize','Off');
-  set(fh5,'Position',fh5.Position+[0 0 240 0]);
+fh5=figure(5);clf; set(fh5,'Resize','Off');set(fh5,'Position',fh5.Position+[0 0 240 0]);
   h1=subplot(221);plot(r.q.qn(ich,1:end-1), r.q.btbias(ich,:), '.-');grid on;
   axis([190 330 -1 1]); ylabel('AIRS - CrIS K')
   h2=subplot(223);semilogy(r.q.qn(ich,1:end-1), r.q.binsz(ich,:),'-');grid on;xlim([190 330]);
-  xlabel('Scene BT at 902 wn (K)');ylabel('population');
+  xlabel(['Scene BT at ' sprintf('%5.1f',fc(ich)) ' wn (K)']);ylabel('population');
     linkaxes([h1 h2],'x');set(h1,'xticklabel','');
     pp1=get(h1,'position');set(h1,'position',[pp1(1) pp1(2)-pp1(4)*0.1 pp1(3) pp1(4)*1.1])
     pp2=get(h2,'position');set(h2,'position',[pp2(1) pp2(2)+pp2(4)*0.1 pp2(3) pp2(4)*1.1])  
@@ -226,7 +255,7 @@ fh5=figure(5);clf;set(fh5,'Resize','Off');
     pp2=get(h2,'position');set(h2,'position',[pp2(1) pp2(2)+pp2(4)*0.1 pp2(3) pp2(4)*1.1])  
   annotation('textbox', [0 0.9 1 0.1], 'String', title5, 'fontSize',14,...
     'EdgeColor', 'none','HorizontalAlignment', 'center')
-  %saveas(gcf,[phome 'quantiles'],'');
+  %saveas(gcf,[phome pfnam_pref 'quantiles.fig'],'fig');
 
 
 

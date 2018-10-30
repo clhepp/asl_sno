@@ -38,14 +38,14 @@ ibt      = real(rad2bt(s.fi(s.ichns), s.ri(:,s.iok)));
 %nbr_ibt  = real(rad2bt(s.fi(s.ichns), s.nbr_ri(:,:,s.iok)));
 %nbr_dbt  = real(rad2bt(s.fd(s.dchns), s.nbr_rd(:,:,s.iok)));
 % ---------------- Basic Stats ------------------------------
-btbias   = dbt - cbt;
+btbias   = cbt - dbt;
 ibm      = nanmean(ibt,2);
 cbm      = nanmean(cbt,2);
 dbm      = nanmean(dbt,2);
 bias_mn  = nanmean(cbt - dbt,2);
 bias_sd  = nanstd(cbt - dbt, 0,2);
 
-radstd   = nanstd( s.rd(:,s.iok) - s.rc(:,s.iok),0,2 ); 
+radstd   = nanstd( s.rc(:,s.iok) - s.rd(:,s.iok),0,2 ); 
  cdbm    = 0.5*( nanmean(dbt,2) + nanmean(cbt,2) );
  mdr     = 1E-3*( 1./drdbt(s.fd(s.dchns),cdbm) );
 btstd    = mdr.*radstd;  
