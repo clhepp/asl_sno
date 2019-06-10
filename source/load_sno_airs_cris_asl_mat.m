@@ -13,8 +13,9 @@ function [s] = load_sno_airs_cris_asl_mat(sdate, edate, xchns, res, src, vers)
 %           (c) xchns: numeric IDs of CrIS channels to load based on NO guard channel list. 
 %              eg [403 499 737 884 905 998 1021 1297] or [399:408], 
 %              LW: [1:713], MW: [714:1146], SW: [1147:1305]
+%              LW: [1:716], MW: [717:1366], SW: [1367:1683] for midres
 %                           MW: [714:1346], SW: [1347:1935] for 'hires3'
-%           (d) CrIS spectral resolution. one of: {'low', 'high'}.
+%           (d) CrIS spectral resolution. one of: {'low', 'medium','high'}.
 %           (e) CrIS mission (NPP = 1, or JPSS-1 = 2) [1 or 2].
 %           (f) vers: string. version reference for data set (found at end of file
 %               name).
@@ -57,18 +58,32 @@ addpath /home/chepplew/gitLib/airs_deconv/source    % seq_match.m
 % Greeting
 disp('Hello! this is load_sno_airs_cris_asl_mat.m');
 
+% Check number of input arguments
+if(nargin ~= 6) error('Please enter all 6 input arguments'); return; end
+
+% reducing agent - for thinning amount of data loaded (for use with long time spans)
+% suggested values: 1 for a month, 2: for 3 months, 4: six months, 8: a year
+reductant = 1;
+
 % initialize logicals to false
 LR = false(1);
 HR = false(1);
 
+% Default processing origin & sno revision:
+MX = 'ASL';
+
 % Assign version string, vers:
-allvers =  {'','v20a','_v20a','a2v4_ref','j1v3_a2v3','a2_test1'};
+allvers = {'','v20a','_v20a','a2v4_ref','j1v3_a2v3','a2_test1',...
+           'noaa_pon','noaa_poff'};
 vers = lower(vers);
 if(~ismember(vers,allvers)); error('version is unrecognized'); return; end
-%vers = 'a2v4_p20';
-
-% Check number of input arguments
-if(nargin ~= 6) error('Please enter all 6 input arguments'); return; end
+if(contains(vers,'noaa'))
+  vers = [upper(vers(1:4)) lower(vers(5:end))];
+  MX   = vers;
+  rev = 'noaa';
+else
+  rev = vers;
+end
 
 % Check mission numbers
 if(length(src) ~=1) error('Need only CRIS mission number'); return; end
@@ -80,7 +95,7 @@ if(src == 2) CX = '2'; end % vers = 'a2v4rf'; end
 
 % ------------------------
 % Process the date strings
-posYrs = [2002:2018];
+posYrs = [2002:2019];
 posMns = [1:12];
 whos sdate; disp([sdate ' to ' edate]); fprintf('\n');
 try 
@@ -92,9 +107,8 @@ catch
 end
 [nyr1 nmn1 ndy1] = datevec(D1);
 [nyr2 nmn2 ndy2] = datevec(D2);
-if(nyr1 ~= nyr2) error('Use same year only'); return; end
 cyr1   = sdate(1:4);     cmn1 = sdate(6:7);     cdy1 = sdate(9:10);
-cyr2   = edate(1:4);     cmn1 = edate(6:7);     cdy1 = edate(9:10);
+cyr2   = edate(1:4);     cmn2 = edate(6:7);     cdy2 = edate(9:10);
 
   junk = sprintf('%4d/%02d/%02d',nyr1-1,12,31);
 jdy1   = datenum(sdate)-datenum(junk);  clear junk;           % needed for data directory
@@ -104,36 +118,56 @@ jdy2   = datenum(edate)-datenum(junk);  clear junk;           % needed for data 
 % -----------------------------------
 % Check the requested CrIS resolution
 res = upper(res);
-if(~ismember(res,{'LOW','HIGH'})) error('Invalid CrIS resolution option'); end
-if(strcmp(res,'HIGH')) HR=true(1); end
-if(strcmp(res,'LOW'))  LR=true(1); end
+HR=false; MR=false; LR=false;
+if(~ismember(res,{'LOW','MEDIUM','HIGH'})) error('Invalid CrIS resolution option'); end
+if(strcmp(res,'HIGH'))   HR=true(1); CR='HR'; end
+if(strcmp(res,'MEDIUM')) MR=true(1); CR='MR'; end
+if(strcmp(res,'LOW'))    LR=true(1); CR='LR'; end
+
+disp(['Mission: ' CX '. Origin: ' MX '. Res: ' CR])
 
 % ------------------------------------
 % Get SNO files by dates as requested:
-if HR 
-   dp = ['/home/chepplew/data/sno/airs_cris' CX '/ASL/HR/' cyr1 '/']; end
-if LR  
-   dp = ['/home/chepplew/data/sno/airs_cris' CX '/ASL/LR/' cyr1 '/']; end
-if(src == 1)
-  %snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_',vers,'.mat'));
-  snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_',vers,'.mat')); %2016
-end
-if(src == 2)
-  snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_',vers,'.mat'));
+%if HR 
+%   dp = ['/home/chepplew/data/sno/airs_cris' CX '/ASL/' CR '/' cyr1 '/']; end
+%if MR 
+%   dp = ['/home/chepplew/data/sno/airs_cris' CX '/ASL/' CR '/' cyr1 '/']; end
+%if LR  
+%   dp = ['/home/chepplew/data/sno/airs_cris' CX '/ASL/' CR '/' cyr1 '/']; end
+%if(src == 1)
+%  %snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_',vers,'.mat'));
+%  snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_',vers,'.mat')); %2016
+%end
+%if(src == 2)
+%  snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_',vers,'.mat'));
+%end
+if(nyr2 > nyr1)
+  disp('yr2 > yr1')
+  dp1 = ['/home/chepplew/data/sno/airs_cris' CX '/' MX '/' CR '/' cyr1 '/'];
+  dp2 = ['/home/chepplew/data/sno/airs_cris' CX '/' MX '/' CR '/' cyr2 '/'];
+  lst1 = dir([dp1 'sno_airs_cris_asl_wngbr_*_frmL1c_' rev '.mat']);
+  lst2 = dir([dp2 'sno_airs_cris_asl_wngbr_*_frmL1c_' rev '.mat']);
+  snoLst = [lst1; lst2];
+elseif (nyr2 == nyr1)
+  disp('yr2 = yr2')
+  dp  = ['/home/chepplew/data/sno/airs_cris' CX '/' MX '/' CR '/' cyr1 '/'];
+  snoLst = dir(strcat(dp, 'sno_airs_cris_asl_wngbr_*frmL1c_',rev,'.mat'));
 end
 disp(['Found ' num2str(numel(snoLst)) ' SNO files']);
 
-ifn1 = 1;             % default start with first file unless later.
-for i=1:numel(snoLst)
-  junk = regexp(snoLst(i).name,'[0-9]','match');
-  junk = cell2mat(junk(1:end));                   % no. 4 appears before date
-  thisdat = datenum(junk,'yyyymmdd');
-  if(thisdat < D1)  ifn1 = i+1; end
-  if(thisdat <= D2) ifn2 = i; end
+ifn1 = 1;
+for ii=1:length(snoLst)
+  %lst3(ii).name
+
+  junk = regexp(snoLst(ii).name,'[0-9]','match');
+  Dx = datenum(cell2mat(junk(1:8)),'yyyymmdd');
+  if(Dx < D1)  ifn1 = ii+1; disp(num2str(ii)); end
+  if(Dx <= D2) ifn2 = ii; end
 end
-disp(['Source dir: ' dp]);
-fprintf(1,'Loading %d SNO files from: %s to %s\n',(ifn2-ifn1+1),snoLst(ifn1).name, ...
-        snoLst(ifn2).name);
+
+disp(['Source directory: ', snoLst(1).folder])
+fprintf(1,'Loading every %d th of %d SNO files from: %s to %s\n', ...
+   reductant, (ifn2-ifn1+1), snoLst(ifn1).name, snoLst(ifn2).name);
 
 % ---------------------------------------
 % Check channel numbers entered correctly
@@ -156,6 +190,14 @@ if LR
   nvc  = length(fcris);
   nvd  = length(fa2c);
 end
+if MR
+  xx    = load('/home/chepplew/projects/sno/airs_cris/fa2c_x.mat');
+  fa2c  = xx.fa2c_midres;  clear xx;
+  xx    = load('/home/chepplew/myLib/data/cris_mr_freq_2grd.mat'); 
+  fcris = xx.vchan; icris = xx.ichan; 
+  nvc   = length(fcris); 
+  nvd   = length(fa2c);
+end
 if HR
   xx   = load('/home/chepplew/projects/sno/airs_cris/fa2c_x.mat');
   fa2c = xx.fa2c_hires3;  clear xx;
@@ -168,6 +210,7 @@ end
 % rc (CrIS) radiances are supplied on 1317 channel grid (2 guard channels)
 % Get the channels to load rc.
 if LR [~, cchns]  = intersect(icris, xchns);  end
+if MR [~, cchns]  = intersect(icris, xchns);  end
 if HR [~, cchns]  = intersect(icris, xchns);  end
 
 % ra2c (airs2cris) is supplied on different channel grids, and MW band is restricted.
@@ -194,24 +237,19 @@ if(length(xchns) == 1305) achns = [1:2645]; end
 cWavs  = fcris(cchns);
 aWavs  = f2645(achns);
 
-% ------------------------------------------
-% Choose which profiler to use (goes in prf)
-junk = [-5:.05:5]; y0 = normpdf(junk,0,1); yp = cumsum(y0)./20.0; clear junk y0;
-s.prf  = yp;
-
-
 % ********************   load up SNO data   ********************
 
 s.tdiff = [];    s.ra = [];    s.rc = [];    s.ra2c = [];  s.cTime = [];  s.aTime = []; 
- s.aLat = [];  s.aLon = []; s.dist  = [];    s.cLat = [];   s.cLon = [];  s.csolz = [];  
+ s.aLat = [];  s.aLon = []; s.asolz = [];   s.dist  = [];    
+ s.cLat = [];  s.cLon = []; s.csolz = [];  
 s.alnfr = []; s.clnfr = [];  s.cFov = []; s.nbr_rLW = []; s.nbr_ra = []; s.nbr_rd = [];
 s.l1creas = [];  s.l1cproc = [];
 
-for ifn = ifn1:1:ifn2;
-  vars = whos('-file',strcat(dp,snoLst(ifn).name));
+for ifn = ifn1:reductant:ifn2;
+  vars = whos('-file',strcat(snoLst(ifn).folder,'/',snoLst(ifn).name));
   if( ismember('nbr_rLW', {vars.name}) & ismember('nbr_ra', {vars.name}) & ...
       ismember('ra2c', {vars.name})  )  %%  & ismember('nbr_ra2c', {vars.name}) ) % 
-    load(strcat(dp, snoLst(ifn).name));
+    load(strcat(snoLst(ifn).folder,'/', snoLst(ifn).name));
     if  (size(rc,1) == nvc & size(ra,1) == 2645 & size(ra2c,1) == nvd)
       s.ra      = [s.ra,   ra(achns,:)];                   % 
       rc_ham    = single(hamm_app(double(rc)));
@@ -225,6 +263,7 @@ for ifn = ifn1:1:ifn2;
       s.aLat    = [s.aLat;  sno.aLat];         s.aLon = [s.aLon;  sno.aLon];
       s.cLat    = [s.cLat;  sno.cLat];         s.cLon = [s.cLon;  sno.cLon];
       s.alnfr   = [s.alnfr; sno.alnfrac];
+      s.asolz   = [s.asolz; sno.aSolzen];     s.csolz = [s.csolz; sno.cSolzen];
       s.cFov    = [s.cFov;  sno.cFov];
       s.tdiff   = [s.tdiff; sno.tdiff];                       %
       s.dist    = [s.dist;  sno.dist];
@@ -249,7 +288,9 @@ s.sdate = sdate;
 s.edate = edate;
 s.src   = src;    % spacraft mission
 s.res   = res;
-s
+s.list  = snoLst(ifn1:ifn2).name;
+s.reductant = reductant;
+
 % -------------------------------------------------------------------
 % *************     Apply QC - this is ESSENTIAL !     *************
 % remove -999 CrIS or A2C radiances separately also do AIRS < -999

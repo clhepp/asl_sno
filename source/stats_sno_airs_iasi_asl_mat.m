@@ -19,6 +19,7 @@ vers = '';
 
 phome = '/home/chepplew/projects/sno/airs_iasi/figs/';
 hamm = 0;
+
 % --------------- convert to BT ----------------------------
 disp('converting to BT')
 abt      = real(rad2bt(fa, s.ra(:,s.iok)));
@@ -26,13 +27,16 @@ if hamm
    junk  = hamm_app(double(s.ri2a(:,s.iok)));
    dbt   = real(rad2bt(fd, junk));
 else
-  ibt      = real(rad2bt(fi, s.ri(:,s.iok)));
-  dbt      = real(rad2bt(fd, s.ri2a(:,s.iok)));
+  ibt      = abs(rad2bt(fi, s.ri(:,s.iok)));         % when complex
+  dbt      = real(rad2bt(fd, s.rd(:,s.iok)));
 end
 %nbr_cbt  = real(rad2bt(fc, s.nbr_rLW(:,:,ig)));     clear junk;
 %nbr_abt  = real(rad2bt(fa, s.nbr_ra(:,:,ig)));
 %nbr_dbt  = real(rad2bt(fd, s.nbr_rd(:,:,ig)));
 % ---------------- Basic Stats ------------------------------
+izx = find(ibt == 0);
+ibt(izx) = NaN;
+
 disp('calculating global basic stats');
 btbias   = abt - dbt;
  % whos abt cbt dbt nbr_abt nbr_cbt nbr_dbt btbias
@@ -46,6 +50,14 @@ radstd   = nanstd( s.ra(:,s.iok) - s.ri2a(:,s.iok),0,2 );
  mdr     = 1E-3*( 1./drdbt(fd,adbm) );
 btstd    = mdr.*radstd;
 btser    = btstd./sqrt(size(abt,2));
+
+% Work in radiance space (for IASI > 2400 cm-1 radiance becomes -ve due to noise)
+r_mn     = 0.5*( s.ra(:,s.iok) + s.rd(:,s.iok));
+bt_mn    = rad2bt(fd, r_mn);
+r_diff   = s.ra(:,s.iok) - s.rd(:,s.iok);
+bias_bt  = bt_mn - rad2bt(fd, r_mn + r_diff);
+bias_mn  = nanmean(bias_bt,2);
+
 
 %nbr_cbm  = nanmean(nbr_cbt,3);
 %nbr_abm  = nanmean(nbr_abt,3);
@@ -204,29 +216,34 @@ figure(6);clf;semilogy(btcens, pdf_nbr_cbt_bin304(ich,:),'.-');xlim([275 315]);g
 % ----------------------------------------------------------------------
 %                   SUBSET by IASI FOV 
 % ----------------------------------------------------------------------
+
 disp('working on CrIS FOV subsets');
 clear xFOV nFOV fov;
-for i=1:4 xFOV{i} = find(s.ifov(s.iok) == i); end
+for i = 1:4 xFOV{i} = find(s.ifov(s.iok) == i); end
 for i = 1:4 nFOV(i) = numel(xFOV{i}); end
 ra_tmp = s.ra(:,s.iok);
-rd_tmp = s.ri2a(:,s.iok);
+rd_tmp = s.rd(:,s.iok);
 for i=1:4
-  fov(i).abt = real( rad2bt(s.fa(s.achns), ra_tmp(:, xFOV{i})) );
-  fov(i).dbt = real( rad2bt(s.fd(s.dchns), rd_tmp(:, xFOV{i})) );
+  fov(i).r_mn    = 0.5*( ra_tmp(:,xFOV{i}) + rd_tmp(:,xFOV{i}));
+  fov(i).r_diff  = ra_tmp(:,xFOV{i}) - rd_tmp(:,xFOV{i});
+  fov(i).bias_mn = nanmean(rad2bt(fd, fov(i).r_mn) - ...
+                       rad2bt(fd, fov(i).r_mn + fov(i).r_diff), 2);
+  fov(i).abt     = real( rad2bt(s.fa(s.achns), ra_tmp(:, xFOV{i})) );
+  fov(i).dbt     = real( rad2bt(s.fd(s.dchns), rd_tmp(:, xFOV{i})) );
 end
 clear ra_tmp rd_tmp;
 %
 btbins  = [190.0: 1.0: 330]; btcens = [190.5: 1.0: 329.5];
 
 for i=1:4
-  for j=1:length(s.achns) fov(i).pdf(j,:) = histcounts(fov(i).abt(j,:), btbins); end
+  for j=1:length(s.achns) fov(i).pdf(j,:) = histcounts(fov(i).ibt(j,:), btbins); end
 end
 
-for i=1:4
-  fov(i).mbias = nanmean(fov(i).abt - fov(i).dbt, 2);
-end
+%for i=1:4
+%  fov(i).mbias = nanmean(fov(i).bias_bt, 2);
+%end
 
-junk = s.ra(:,s.iok) - s.ri2a(:,s.iok);
+junk = s.ra(:,s.iok) - s.rd(:,s.iok);
 for i = 1:4
   radstd  = nanstd(junk(:,xFOV{i}),0,2 );
    adbm    = 0.5*( nanmean(dbt(:,xFOV{i}),2) + nanmean(abt(:,xFOV{i}),2) );

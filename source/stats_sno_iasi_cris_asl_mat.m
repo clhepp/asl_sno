@@ -6,7 +6,11 @@ function r = stats_sno_iasi_cris_asl_mat(s, band)
 %
 % 
 
-addpath /asl/matlib/aslutil               % drdbt.m
+addpath /home/chepplew/gitLib/asl_sno/source
+addpath /asl/packages/airs_decon/source             % hamm_app.m
+addpath /asl/matlib/aslutil                         % rad2bt.m
+addpath /home/strow/Git/breno_matlab/Math           % Math_bin.m
+addpath /home/chepplew/gitLib/airs_deconv/source    % seq_match.m
 
 % Hardwire spectral band
 if(~ismember(band,{'LW','MW','SW'})) error('Invalid band'); return; end
@@ -18,34 +22,46 @@ fi   = s.fi(s.ichns);
 fc   = s.fc(s.cchns);
 fd   = s.fd(s.dchns);
 %vers = strrep(s.vers,'_','.');
+res  = upper(s.res);
 
-% Initialization
-phome = '/home/chepplew/projects/sno/iasi_cris/figs/';
-hamm  = 0;
+if(strcmp(res,'LOW'))    CR = 'LR'; end
+if(strcmp(res,'MEDIUM')) CR = 'MR'; end
+if(strcmp(res,'HIGH'))   CR = 'HR'; end
+
+hamm  = 1;
+
+s.ri     = s.ri(:,s.iok);
+s.rd     = s.rd(:,s.iok);
+if hamm
+   s.rc  = hamm_app(double(s.rc(:,s.iok)));
+   %s.rd  = hamm_app(double(s.rd(:,s.iok)));
+else
+  s.rc   = s.rc(:,s.iok);
+  s.rd   = s.rd(:,s.iok);
+end
 
 % --------------- convert to BT ----------------------------
-if hamm 
-  junk = hamm_app(double(s.rd(:,s.iok))); 
-  dbt  = real(rad2bt(s.fd(s.dchns), junk)); clear junk;
-  junk = hamm_app(double(s.rc(:,s.iok)));
-  cbt  = real(rad2bt(s.fc(s.cchns), junk)); clear junk; 
-else
-  dbt      = real(rad2bt(s.fd(s.dchns), s.rd(:,s.iok)));
-  cbt      = real(rad2bt(s.fc(s.cchns), s.rc(:,s.iok)));
-end
-ibt      = real(rad2bt(s.fi(s.ichns), s.ri(:,s.iok)));
+csz = find(s.rc == 0);
+isz = find(s.ri == 0);
+if(length(csz)) s.rc(csz) = NaN; end
+if(length(isz)) s.ri(isz) = NaN; end
+
+dbt      = real(rad2bt(fd, s.rd));
+cbt      = real(rad2bt(fc, s.rc));
+ibt      = real(rad2bt(fi, s.ri));
+
 %nbr_cbt  = real(rad2bt(s.fc(s.cchns), s.nbr_rLW(:,:,s.iok)));
 %nbr_ibt  = real(rad2bt(s.fi(s.ichns), s.nbr_ri(:,:,s.iok)));
 %nbr_dbt  = real(rad2bt(s.fd(s.dchns), s.nbr_rd(:,:,s.iok)));
 % ---------------- Basic Stats ------------------------------
-btbias   = cbt - dbt;
-ibm      = nanmean(ibt,2);
-cbm      = nanmean(cbt,2);
-dbm      = nanmean(dbt,2);
-bias_mn  = nanmean(cbt - dbt,2);
-bias_sd  = nanstd(cbt - dbt, 0,2);
+btbias     = cbt - dbt;
+ibm        = nanmean(ibt,2);
+cbm        = nanmean(cbt,2);
+dbm        = nanmean(dbt,2);
+bias_btmn  = nanmean(cbt - dbt,2);
+bias_sd    = nanstd(cbt - dbt, 0,2);
 
-radstd   = nanstd( s.rc(:,s.iok) - s.rd(:,s.iok),0,2 ); 
+radstd   = nanstd( s.rc - s.rd,0,2 ); 
  cdbm    = 0.5*( nanmean(dbt,2) + nanmean(cbt,2) );
  mdr     = 1E-3*( 1./drdbt(s.fd(s.dchns),cdbm) );
 btstd    = mdr.*radstd;  
@@ -56,7 +72,22 @@ btser    = btstd./sqrt(size(cbt,2));
 %nbr_cbsd = nanstd(nbr_cbt,0,3);                     % global std.dev
 %nbr_absd = nanstd(nbr_abt,0,3);
 %nbr_dbsd = nanstd(nbr_dbt,0,3);
- whos *bt bias* *bm bias_* nbr_*
+
+% Work in radiance space (also handles -ve radiances in SW correctly)
+irm      = nanmean(s.ri,2);
+crm      = nanmean(s.rc,2);
+drm      = nanmean(s.rd,2);
+ibtrm    = rad2bt(fi, irm);
+cbtrm    = rad2bt(fc, crm);
+dbtrm    = real(rad2bt(fd, drm));
+
+r_mn     = 0.5*( s.rc + s.rd );
+bt_mn    = rad2bt(fd, r_mn);
+r_diff   = s.rc - s.rd;
+bias_bt  = bt_mn - rad2bt(fd, r_mn - r_diff);
+bias_mn  = real(nanmean(bias_bt,2));
+
+  whos *bt* bias* *bm bias_* nbr_*
 
 % --------------- neighbour stats at SNOs ----------------------------
 
@@ -106,6 +137,30 @@ biasbins = [-20:0.2:20];  biascens = [-19.9:0.2:19.9];
 for i=1:size(dbt,1) pdf_bias(i,:) = histcounts(dbt(i,:)-cbt(i,:), biasbins); end
 %
 %for i=1:size(nsd_cbt,1) pdf_nsd_cbt(i,:) = histcounts(nsd_cbt(i,:), biasbins); end
+
+switch band
+  case 'LW'
+    dtemp = 1;
+    radbins = [10 : dtemp : 160];
+    wvn = 900;
+  case 'MW'
+    dtemp = 0.5;
+    radbins = [2 : dtemp : 100];
+    wvn = 1231;
+  case 'SW'
+    dtemp = 0.005;
+    junk = [0.0 : dtemp : 1];
+    radbins = junk.^2;
+    wvn = 2360;
+end
+radcens = [0.5*(radbins(2)+radbins(1)) :dtemp :0.5*(radbins(end-1)+radbins(end))];
+rbtbins = rad2bt(wvn,radbins);
+rbtcens = rad2bt(wvn,radcens);
+
+for i=1:size(s.rc,1) pdf_crad(i,:) = histcounts(real(s.rc(i,:)), radbins); end
+for i=1:size(s.ri,1) pdf_irad(i,:) = histcounts(real(s.ri(i,:)), radbins); end
+for i=1:size(s.rd,1) pdf_drad(i,:) = histcounts(real(s.rd(i,:)), radbins); end
+
  whos pdf*
  
 % -------------------------- quantiles --------------------------- %
@@ -120,20 +175,20 @@ junk = [-5:.05:5]; y0 = normpdf(junk,0,1); yp = cumsum(y0)./20.0; clear junk y0;
 s.prf  = yp;
 
 % create the scene bins for each channel and choose AIRS or simulated AIRS
-xbt = dbt;      xra = s.rd;
+%xbt = dbt;      xra = s.rd;
 %xbt = sim_abt;  xra = sim_ra;
 
 clear qcBins qdBins qsBins qc qd;
-qcBins.B = quantile(cbt,s.prf,2);
-qdBins.B = quantile(xbt,s.prf,2);
-qc       = cell2mat(struct2cell(qcBins));
-qd       = cell2mat(struct2cell(qdBins));
-qcd      = (qc + qd)/2.0;
+qcBins   = quantile(cbt,s.prf,2);
+qdBins   = quantile(dbt,s.prf,2);
+%qc       = cell2mat(struct2cell(qcBins));
+%qd       = cell2mat(struct2cell(qdBins));
+qcd      = (qcBins + qdBins)/2.0;
 
 for jj = 1:numel(s.cchns)
   sbins = qcd(jj,:);
-  [dbin dbinStd dbinN dbinInd] = Math_bin(xbt(jj,:),cbt(jj,:)-xbt(jj,:),sbins); 
-  [cbin cbinStd cbinN cbinInd] = Math_bin(cbt(jj,:),cbt(jj,:)-xbt(jj,:),sbins);
+  [dbin dbinStd dbinN dbinInd] = Math_bin(dbt(jj,:),cbt(jj,:)-dbt(jj,:),sbins); 
+  [cbin cbinStd cbinN cbinInd] = Math_bin(dbt(jj,:),cbt(jj,:)-dbt(jj,:),sbins);
 
   % diagnostics: record the separate number samples in each bin:
   num_cbin(jj,:) = cbinN;
@@ -145,9 +200,9 @@ for jj = 1:numel(s.cchns)
 
   for i = 1:length(dbin)
     q.binsz(jj,i)   = length(ubinInd{i});
-    q.btbias(jj,i)  = nanmean( xbt(jj,ubinInd{i}) - cbt(jj,ubinInd{i}) );
-    q.radstd(jj,i)  = nanstd( xra(jj,s.iok(ubinInd{i})) - s.rc(jj,s.iok(ubinInd{i})) );   % s.rc
-    cdbm(i)    = 0.5*( nanmean(xbt(jj,ubinInd{i})) + nanmean(cbt(jj,ubinInd{i})) );
+    q.btbias(jj,i)  = nanmean( dbt(jj,ubinInd{i}) - cbt(jj,ubinInd{i}) );
+    q.radstd(jj,i)  = nanstd( s.rc(jj,ubinInd{i}) - s.rd(jj,ubinInd{i}) );
+    cdbm(i)    = 0.5*( nanmean(dbt(jj,ubinInd{i})) + nanmean(cbt(jj,ubinInd{i})) );
       mdr      = 1E-3*( 1./drdbt(s.fd(s.dchns(jj)),cdbm(i)) );
     q.btstd(jj,i)   = mdr.*q.radstd(jj,i);  
     q.btser(jj,i)   = q.btstd(jj,i)./sqrt(q.binsz(jj,i));
@@ -155,7 +210,7 @@ for jj = 1:numel(s.cchns)
   end
   jtot  = sum(q.binsz(jj,:));
   jmdr  = 1E-3*( 1./drdbt(s.fd(s.dchns(jj)),cbm(jj)) );
-  jbtse = jmdr.* nanstd(xra(jj,s.iok) - s.rc(jj,s.iok),1,2) / sqrt(jtot);   % s.rc
+  jbtse = jmdr.* nanstd(s.rc(jj,:) - s.rc(jj,:),1,2) / sqrt(jtot);   % s.rc
   fprintf(1,'.');
 end
 fprintf(1,'\n');
@@ -167,35 +222,41 @@ q.qn = qcd;
 % ----------------------------------------------------------------------
 disp('working on CrIS FOV subsets');
 clear xFOV nFOV fov;
-for i=1:9 xFOV{i} = find(s.cfov(s.iok) == i); end
+for i = 1:9 xFOV{i} = find(s.cfov(s.iok) == i); end
 for i = 1:9 nFOV(i) = numel(xFOV{i}); end
-rc_tmp = s.rc(:,s.iok);
-rd_tmp = s.rd(:,s.iok);
-for i=1:9
-  fov(i).cbt = real( rad2bt(s.fc(s.cchns), rc_tmp(:, xFOV{i})) );
-  fov(i).dbt = real( rad2bt(s.fd(s.dchns), rd_tmp(:, xFOV{i})) );
-end
-clear rc_tmp rd_tmp;
-%
-btbins  = [190.0: 1.0: 330]; btcens = [190.5: 1.0: 329.5];
-
-for i=1:9
-  for j=1:length(s.cchns) fov(i).pdf(j,:) = histcounts(fov(i).cbt(j,:), btbins); end
-end
-
-for i=1:9
-  fov(i).mbias = nanmean(fov(i).cbt - fov(i).dbt, 2);
-end
-
-junk = s.rd(:,s.iok) - s.rc(:,s.iok);
 for i = 1:9
-  radstd  = nanstd(junk(:,xFOV{i}),0,2 );
+  fov(i).r_mn    = 0.5*( s.rc(:,xFOV{i}) + s.rd(:,xFOV{i}));
+  fov(i).r_diff  = s.rc(:,xFOV{i}) - s.rd(:,xFOV{i});
+  fov(i).bias_mn = real(nanmean(rad2bt(fd, fov(i).r_mn) - ...
+                       rad2bt(fd, fov(i).r_mn - fov(i).r_diff), 2));
+  fov(i).cbt     = real( rad2bt(s.fc(s.cchns), s.rc(:, xFOV{i})) );
+  fov(i).dbt     = real( rad2bt(s.fd(s.dchns), s.rd(:, xFOV{i})) );
+end
+%
+for i=1:9
+  for j=1:length(s.cchns)
+    fov(i).pdf_crad(j,:) = histcounts(real(s.rc(j,xFOV{i})), radbins);
+  end
+  for j=1:length(s.dchns)
+    fov(i).pdf_drad(j,:) = histcounts(real(s.rd(j,xFOV{i})), radbins);
+  end
+end
+
+for i = 1:9
+  radstd   = nanstd(r_diff(:,xFOV{i}),0,2 );
    cdbm    = 0.5*( nanmean(dbt(:,xFOV{i}),2) + nanmean(cbt(:,xFOV{i}),2) );
    mdr     = 1E-3*( 1./drdbt(fd,cdbm) );
   btstd    = mdr.*radstd;
   fov(i).btser = btstd./sqrt(numel(xFOV{i}));
 end
-clear junk;
+
+%for i=1:9
+%  for j=1:length(s.cchns) fov(i).pdf(j,:) = histcounts(fov(i).cbt(j,:), btbins); end
+%end
+%
+%for i=1:9
+%  fov(i).mbias = nanmean(fov(i).cbt - fov(i).dbt, 2);
+%end
 
 %  -------- Quantile Analysis ---------
 for i=1:9
@@ -204,53 +265,55 @@ for i=1:9
   fov(i).qn = qn_c; % (qn_c + qn_d)/2.0;
 end
 disp('computing quantiles for each FOV - will take a while!')
-for i=1:9 fov(i).binsz = []; fov(i).btbias = []; fov(i).btstd = []; fov(i).btser = []; end
+for i=1:9 
+  fov(i).qbinsz = []; fov(i).qbtbias = []; fov(i).qbtstd = []; fov(i).qbtser = [];
+end
 for i=1:9
   xrd = s.rd(:,xFOV{i});
   xrc = s.rc(:,xFOV{i});
-for j = 1:size(cbt,1)
-  sbins = fov(i).qn(j,:);
-  [dbin dbinStd dbinN dbinInd] = ...
-      Math_bin(fov(i).dbt(j,:),fov(i).cbt(j,:) - fov(i).dbt(j,:),sbins); 
-  [cbin cbinStd cbinN cbinInd] = ...
-      Math_bin(fov(i).cbt(j,:),fov(i).cbt(j,:) - fov(i).dbt(j,:),sbins);
-  for k = 1:length(dbin)                                                       
-    ubinInd(k,:) = {union(dbinInd{k},cbinInd{k})};                  
-    fov(i).binsz(j,k)  = length(ubinInd{k});
-    fov(i).btbias(j,k) = nanmean(fov(i).dbt(j,ubinInd{k}) - fov(i).cbt(j,ubinInd{k}) );
+  for j = 1:size(cbt,1)
+    sbins = fov(i).qn(j,:);
+    [dbin dbinStd dbinN dbinInd] = ...
+        Math_bin(fov(i).dbt(j,:),fov(i).cbt(j,:) - fov(i).dbt(j,:),sbins); 
+    [cbin cbinStd cbinN cbinInd] = ...
+        Math_bin(fov(i).cbt(j,:),fov(i).cbt(j,:) - fov(i).dbt(j,:),sbins);
+    for k = 1:length(dbin)                                                       
+      ubinInd(k,:) = {union(dbinInd{k},cbinInd{k})};                  
+      fov(i).qbinsz(j,k)  = length(ubinInd{k});
+      fov(i).qbtbias(j,k) = nanmean(fov(i).dbt(j,ubinInd{k}) - fov(i).cbt(j,ubinInd{k}) );
 
-    radstd  = nanstd( xrd(j,ubinInd{k}) - xrc(j,ubinInd{k}) );   % s.rc
-    cdbm    = 0.5*( nanmean(fov(i).dbt(j,ubinInd{k})) + ...
-                    nanmean(fov(i).cbt(j,ubinInd{k})) );
-      mdr      = 1E-3*( 1./drdbt(fd(j),cdbm) );
-    fov(i).btstd(j,k)   = mdr.*radstd;  
-    fov(i).btser(j,k)   = fov(i).btstd(j,k)./sqrt(fov(i).binsz(j,k));
+      radstd  = nanstd( xrd(j,ubinInd{k}) - xrc(j,ubinInd{k}) );   % s.rc
+      cdbm    = 0.5*( nanmean(fov(i).dbt(j,ubinInd{k})) + ...
+                      nanmean(fov(i).cbt(j,ubinInd{k})) );
+        mdr   = 1E-3*( 1./drdbt(fd(j),cdbm) );
+      fov(i).qbtstd(j,k)   = mdr.*radstd;  
+      fov(i).qbtser(j,k)   = fov(i).qbtstd(j,k)./sqrt(fov(i).qbinsz(j,k));
 
+    end
   end
-end
-fprintf(1,'.')
+  fprintf(1,'.')
 end
 
 % ----------------- choose which variables to return ------------
 r.src   = s.src;
 r.res   = s.res;
-%r.vers  = vers;
-r.band  = band;
-r.sdate = s.sdate;     r.edate = s.edate;
-r.nsam  = size(dbt,2);
-r.fi    = s.fi;         r.fc = s.fc;         r.fd = s.fd;
-r.ichns = s.ichns;   r.cchns = s.cchns;   r.dchns = s.dchns;
+r.vers  = s.vers;
+r.band     = band;
+r.sdate    = s.sdate;     r.edate = s.edate;
+r.nsam     = size(dbt,2);
+r.fi       = s.fi;        r.fc = s.fc;              r.fd = s.fd;
+r.ichns    = s.ichns;     r.cchns = s.cchns;        r.dchns = s.dchns;
 r.cbt      = cbt;
 r.btbias   = single(btbias);
-r.ibm = ibm;  r.cbm = cbm;  r.dbm = dbm;
-r.bias_mn  = bias_mn;  r.bias_sd = bias_sd; r.btser = btser;  r.btstd = btstd;
+r.ibm = ibm;              r.cbm = cbm;              r.dbm = dbm;
+r.bias_mn  = bias_mn;     r.bias_sd = bias_sd;      r.btser = btser;  %r.btstd = btstd;
 r.fov      = fov;
-r.pdf_ibt  = pdf_ibt;
-r.pdf_cbt  = pdf_cbt;
-r.pdf_dbt  = pdf_dbt;
-r.btbins   = btbins;      r.btcens  = btcens;
+r.pdf_ibt  = pdf_ibt;     r.pdf_cbt  = pdf_cbt;     r.pdf_dbt  = pdf_dbt;
 r.pdf_bias = pdf_bias;
-r.biasbins = biasbins;  r.biascens = biascens;
+r.pdf_crad = pdf_crad;    r.pdf_irad = pdf_irad;    r.pdf_drad = pdf_drad;
+r.radbins  = radbins;     r.radcens = radcens;
+r.btbins   = rbtbins;     r.btcens  = rbtcens;
+r.biasbins = biasbins;    r.biascens = biascens;
 r.q        = q;
 
 %

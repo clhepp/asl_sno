@@ -182,9 +182,13 @@ s.dchns  = achns;
 %s.iWavs  = iWavs;
 %s.agood  = agood;
 
-% Check QA
-iok  = find(s.iqual == 0);
-ibad = find(s.iqual > 0);
+% Check QA and non-physical radiances
+clear izx;
+iok   = find(s.iqual == 0);
+ibad  = find(s.iqual > 0);
+for i=1:length(ichns)
+  izx(i).n = find(s.ri(i,:) <= 0 );
+end
 
 % Remove 6-sigma
 aibias = s.ri2a - s.ra;

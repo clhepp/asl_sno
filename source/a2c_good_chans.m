@@ -2,6 +2,9 @@ function [ig] = a2c_good_chans(fc);
 
 addpath /asl/packages/airs_decon/source          % seq_match
 
+% ensure supplied vector is a column vector
+if(~iscolumn(fc)) fc=fc'; end
+
 % AIRS channel properties file
 cp = load('/home/strow/Work/Airs/Chan_Prop_Files/chan_prop.2015.03.23.v9.5.3.mat');
 ig.cp = cp;

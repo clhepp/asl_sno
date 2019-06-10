@@ -10,6 +10,9 @@ function plot_sno_airs_cris_asl_mat(r,s,vis)
 % plot options
 % set(gcf,'Resize','off');
 
+addpath /home/chepplew/gitLib/asl_sno/source
+addpath /asl/matlib/aslutil                      % simplemap 
+
 % Check number of input arguments
 if(nargin ~= 3) error('Please enter all 3 input arguments'); return; end
 if(~ismember(vis,[0 1])) error('vis must be 0 or 1'); return; end
@@ -28,13 +31,14 @@ res  = r.res;
 src  = r.src;    %  (s/craft npp = 1, j01=2);
 band = r.band;   %  LW, MW or SW
 
-if(strcmp(res,'HIGH')) CR='HR'; end
-if(strcmp(res,'LOW'))  CR='LR'; end
+if(strcmp(res,'HIGH'))   CR='HR'; end
+if(strcmp(res,'MEDIUM')) CR='MR'; end
+if(strcmp(res,'LOW'))    CR='LR'; end
 if(src == 1)  SR = ''; end
 if(src == 2)  SR = '2'; end
 
 % Initialization
-phome = ['/home/chepplew/projects/sno/airs_cris/' CR '/figs/'];
+phome = ['/home/chepplew/projects/sno/airs_cris' SR '/' CR '/figs/'];
 
 xyr  = year(datetime(datenum(r.sdate),'convertfrom','datenum'));
 cyr  = num2str(xyr);
@@ -42,48 +46,56 @@ smn  = month(datetime(datenum(r.sdate),'convertfrom','datenum'),'shortname');
 smn  = lower(cell2mat(smn));
 emn  = month(datetime(datenum(r.edate),'convertfrom','datenum'),'shortname');
 emn  = lower(cell2mat(emn));
-part = 'a';
+part = '';
 
-cc=fovcolors;       % Howard's 9 line colors uas as: plot(...,'-','color',cc(i,:))
+cc=fovcolors;       % Howard's 9 line colors. use: plot(...,'-','color',cc(i,:))
 
-if(emn ~= smn)
+if(~strcmp(emn, smn))
 pfnam_pref = ['sno_ac' num2str(src) '_' lower(CR) '_' lower(band) ...
               '_' cyr smn '-' emn '_'];
 end
-if(emn == smn)
+if(strcmp(emn, smn))
 pfnam_pref = ['sno_ac' num2str(src) '_' lower(CR) '_' lower(band) ...
               '_' cyr smn part '_'];
 end
 
+% get list of good channels 
+cig = a2c_good_chans(fc);
 
+% wavenumber bounds for plotting
 wnbnd = [floor(fc(1)-10) ceil(fc(end)+10)];
+
+if(strcmp(band,'LW'))
+  wvn = 900;
+  ach = find(r.fa>wvn,1);  
+  cch = find(r.fc>wvn,1);  
+  dch = find(r.fd>wvn,1);
+  wvn = num2str(wvn);
+end
+if(strcmp(band,'MW'))
+  wvn = 1231;
+  ach = find(r.fa>wvn,1); 
+  cch = find(r.fc>wvn,1); 
+  dch = find(r.fd>wvn,1);
+  wvn = num2str(wvn);
+end
+if(strcmp(band,'SW'))
+  wvn = 2360;                % was 2410
+  ach = find(r.fa>wvn,1);
+  cch = find(r.fc>wvn,1); 
+  dch = find(r.fd>wvn,1);
+  wvn = num2str(wvn);
+end
 
 % ----------------------------------------------------------------
 %                     PLOTTING SECTION 
 % ----------------------------------------------------------------
 if(~VIS) fh1 = figure('visible','off'); end
-if(VIS) fh1=figure(1);clf; end
-plot(r.fa, r.abm,'-', r.fc, r.cbm,'-', r.fd, r.dbm,'-');
-  grid on;legend('AIRS','CrIS','A2C','Location','southEast');
+if(VIS)  fh1 = figure(1);clf; end
+  set(gcf,'Resize','Off'); set(gcf,'Position',fh1.Position+[0 0 210 0]);
+  plot(r.fa, r.abm,'-', r.fc, r.cbm,'-', r.fd, r.dbm,'-');
+    grid on;legend('AIRS','CrIS','A2C','Location','southEast');
 % ------------ Maps ----------------------
-if(strcmp(band,'LW'))
-  ach = find(r.fa>900,1);  
-  cch = find(r.fc>900,1);  
-  dch = find(r.fd>900,1);
-  wvn='900';
-end
-if(strcmp(band,'MW'))
-  ach = find(r.fa>1231,1); 
-  cch = find(r.fc>1231,1); 
-  dch = find(r.fd>1231,1);
-  wvn='1231';
-end
-if(strcmp(band,'SW'))
-  ach = find(r.fa>2360,1); % was 2410
-  cch = find(r.fc>2360,1); 
-  dch = find(r.fd>2360,1);
-  wvn='2360';    % was '2410';
-end
 title2=['ASL AC.' num2str(src) ' SNO ' r.sdate ' to ' r.edate ' ' band ' overview'];
 if(~VIS) fh2 = figure('visible','off'); end
 if(VIS)  fh2 = figure(2);clf; end
@@ -102,19 +114,19 @@ if(VIS)  fh2 = figure(2);clf; end
   %saveas(fh2,[phome pfnam_pref 'maps.png'],'png');
   
 % ------------ Histograms -----------------
-pc_diff_pdf = 100.*(r.pdf_cbt - r.pdf_dbt)./r.pdf_cbt;
+pc_diff_pdf = 100.*(r.pdf_crad - r.pdf_drad)./r.pdf_crad;
 title3=['ASL AC.' num2str(src) ' SNO ' r.sdate ' to ' r.edate ' ' wvn ' cm^{-1} pdfs ' vers];
 if(~VIS) fh3 = figure('visible','off'); end
 if(VIS) fh3=figure(3);clf; end
-  set(gcf,'Resize','off');set(fh3,'Position',fh3.Position+[0 0 420 240]);
-  h1 = subplot(221);plot(r.btcens,r.pdf_cbt(cch,:),'.-', r.btcens,r.pdf_dbt(dch,:),'.-',...
-    r.btcens,r.pdf_abt(ach,:),'-'); grid on;xlim([190 330]);
+  set(gcf,'Resize','off');set(fh3,'Position',fh3.Position+[0 0 360 185]);
+  h1 = subplot(221);plot(r.btcens,r.pdf_crad(cch,:),'.-', r.btcens,r.pdf_drad(dch,:),'.-',...
+    r.btcens,r.pdf_arad(ach,:),'-'); grid on;xlim([190 330]);
     xlabel('Scene BT bin (K)');ylabel('Number in bin');legend('CrIS','AIRStoCrIS','AIRS')
     title('')
   h2=subplot(223);plot(r.biascens, r.pdf_bias(cch,:), '.-');grid on;
     xlabel('bin BT (K)');ylabel('population');legend([wvn ' cm^{-1}']);
     title('AIRS:CrIS SNO bias');
-  h3=subplot(222);plot(r.btcens,r.pdf_cbt(cch,:),'.-', r.btcens,r.pdf_dbt(dch,:),'.-'); 
+  h3=subplot(222);plot(r.btcens,r.pdf_crad(cch,:),'.-', r.btcens,r.pdf_drad(dch,:),'.-'); 
     grid on;xlim([200 320]);legend('CrIS','AIRS');xlabel('Tb (K)');
     title('');
   h4=subplot(224);plot(r.btcens, pc_diff_pdf(dch,:),'.-');
@@ -155,7 +167,8 @@ figure(2);clf;plot(btcens, (pdf_sim_cbt(4,:) - pdf_cbt(4,:))./pdf_cbt(4,:),'.-')
 %figure(4);clf;plot(r.fd,r.bias_mn,'-');
 %
 wnbnd = [floor(r.fc(1)-10) ceil(r.fc(end)+10)];
-title4=['AC.' num2str(src) ' SNO ' r.sdate ' to ' r.edate ' Mean Bias ' band ' ' vers ''];
+title4=['AC.' num2str(src) ' SNO ' r.sdate ' to ' r.edate ...
+        ' Mean Bias ' band ' ' CR ' ' vers ''];
 if(~VIS) fh4 = figure('visible','off'); end
 if(VIS)  fh4 = figure(4);clf; end
   set(fh4,'Resize','Off');set(fh4,'Position',fh4.Position+[0 0 280 210]);
@@ -164,14 +177,14 @@ if(VIS)  fh4 = figure(4);clf; end
   legend(['CrIS.' num2str(src) ' - AIRS','10*std.err.']);
   xlabel('wavenumber cm^{-1}');ylabel('CrIS minus AIRS (K)');
 
-  h2=subplot(222);hold on; for i=1:9 plot(r.fc,r.fov(i).mbias,'-','color',cc(i,:)); end
+  h2=subplot(222);hold on; for i=1:9 plot(r.fc,r.fov(i).bias_mn,'-','color',cc(i,:)); end
   axis([wnbnd(1) wnbnd(2) -0.8 0.8]);grid on;
   legend('1','2','3','4','5','6','7','8','9','Location','eastOutside',...
          'orientation','vertical');
   xlabel('wavenumber cm^{-1}');ylabel('CcIS minus AIRS (K)');
 % with FOV 5 as the reference
   h3=subplot(223);hold on;
-  for i=[1:4 6:9] plot(r.fc,r.fov(i).mbias - r.fov(5).mbias,'-','color',cc(i,:)); end
+  for i=[1:4 6:9] plot(r.fc,r.fov(i).bias_mn - r.fov(5).bias_mn,'-','color',cc(i,:)); end
   grid on; axis([wnbnd(1) wnbnd(2) -0.4 0.4]); 
   legend('1','2','3','4','6','7','8','9','Location','eastOutside');
   xlabel('wavenumber cm^{-1}');ylabel('dBT (K)');
@@ -183,17 +196,20 @@ if(VIS)  fh4 = figure(4);clf; end
 
 %{  
 % Double difference (must have loaded two sets: ac1_fov and ac2_fov)
+title4=['AC.1 : AC.2' ' SNO ' r1.sdate ' to ' r1.edate ...
+        ' Mean Bias ' r1.band ' ' CR ' ' vers ''];
 figure(4);clf;hold on; 
-  for i=1:9 plot(fc, r.fov(i).mbias - r2.fov(i).mbias,'-','color',cc(i,:));end
+  for i=1:9 plot(fc, r1.fov(i).bias_mn - r2.fov(i).bias_mn,'-','color',cc(i,:));end
   axis([wnbnd(1) wnbnd(2) -0.4 0.4]);grid on;
     legend('1','2','3','4','5','6','7','8','9',...
            'Location','eastOutside'); %,'orientation','horizontal');
   xlabel('wavenumber cm^{-1}');ylabel('A:CrIS.1 minus A:CrIS.2 (K)');
-  title([{'2018Jan SNO mean bias of'} {'A:C1 minus A:C2.a2.test1 vs FOV MW'}]);
-  %saveas(gcf, [phome 'sno_ac1_ac2_dble_diff_lr_lw_2018feb-jun.fig'],'fig')
+  title(title4);
+  %saveas(gcf, [phome pfnam_pref 'dble_diff.fig'],'fig');
+  %saveas(gcf, [phome pfnam_pref 'dble_diff.png'],'png');
 
-nf4 = figure(4);clf;  set(gcf,'Resize','off');
-set(nf4,'Position',nf4.Position+[0,0,280 210]);
+  nf4 = figure(4);clf;  set(gcf,'Resize','off');
+  set(nf4,'Position',nf4.Position+[0,0,280 210]);
 h1=subplot(3,1,1);hold on;for i=1:9 plot(fc, r3.fov(i).btser,'-','color',cc(i,:));end;
   grid on;legend('1','2','3','4','5','6','7','8','9',...
                  'Location','north','orientation','horizontal');
@@ -206,7 +222,17 @@ h3=subplot(3,1,3);hold on;for i=1:9 plot(fc, r1.fov(i).btser,'-','color',cc(i,:)
   title(h1,'2018Jand021e048 A:C SNO std.err vs FOV 3 sets')
 %saveas(gcf,[phome '2018d021e048_ac_sno_stderr_vs_fov_ac1_ac2t1_ac2ref_mw.png'],'png')
 %}  
+%{
+% Clean version of bias plot with dead,edge and fake channels removed
+ bias_clean = r.bias_mn;
+ bias_clean([cig.dead' cig.fill cig.pop' cig.edgechans]) = NaN;
+ bias_clean(end-1:end) = NaN;
+  
+nf7 = figure(7); clf
+  plot(r.fc, bias_clean,'-');
 
+
+%}
 %{
 % ---------------- choose hot subset (or no subset here)
  idx = ':';  % idx = uHot305;
@@ -227,14 +253,14 @@ pdf_sno3  = histcounts(cbt(4,uHot305), btbins);
 clear pdf_*
 %}
 % -------------------------- quantiles --------------------------- %
-if(strcmp(band,'LW')) ich = find(fc > 900,1); end % LW(713) = 402;   % or 16
-if(strcmp(band,'MW')) ich = find(fc > 1231,1); end % MW 16
-title5 = ['ASL AC.' num2str(src) ' SNO ' r.sdate ' to ' r.edate ' Quantiles ' wvn ' wn Bias'];
-fh5=figure(5);clf; set(fh5,'Resize','Off');set(fh5,'Position',fh5.Position+[0 0 240 0]);
-  h1=subplot(221);plot(r.q.qn(ich,1:end-1), r.q.btbias(ich,:), '.-');grid on;
+title5 = ['AC.' num2str(src) ' SNO ' r.sdate ' to ' r.edate ' Quantiles ' wvn ' wn Bias'];
+if(~VIS) fh5 = figure('visible','off'); end
+if(VIS)  fh5 = figure(5);clf; end
+  set(fh5,'Resize','Off');set(fh5,'Position',fh5.Position+[0 0 240 0]);
+  h1=subplot(221);plot(r.q.qn(cch,1:end-1), r.q.btbias(cch,:), '.-');grid on;
   axis([190 330 -1 1]); ylabel('AIRS - CrIS K')
-  h2=subplot(223);semilogy(r.q.qn(ich,1:end-1), r.q.binsz(ich,:),'-');grid on;xlim([190 330]);
-  xlabel(['Scene BT at ' sprintf('%5.1f',fc(ich)) ' wn (K)']);ylabel('population');
+  h2=subplot(223);semilogy(r.q.qn(cch,1:end-1), r.q.binsz(cch,:),'-');grid on;xlim([190 330]);
+  xlabel(['Scene BT at ' sprintf('%5.1f',fc(cch)) ' wn (K)']);ylabel('population');
     linkaxes([h1 h2],'x');set(h1,'xticklabel','');
     pp1=get(h1,'position');set(h1,'position',[pp1(1) pp1(2)-pp1(4)*0.1 pp1(3) pp1(4)*1.1])
     pp2=get(h2,'position');set(h2,'position',[pp2(1) pp2(2)+pp2(4)*0.1 pp2(3) pp2(4)*1.1])  
@@ -242,20 +268,21 @@ fh5=figure(5);clf; set(fh5,'Resize','Off');set(fh5,'Position',fh5.Position+[0 0 
 % --- quantiles subset by FOV  -------
   h1=subplot(222); hold on;
   for i=1:9 
-    plot(r.fov(i).qn(ich,1:end-1),r.fov(i).btbias(ich,:),'.-','color',cc(i,:)); 
+    plot(r.fov(i).qn(cch,1:end-1),r.fov(i).btbias(cch,:),'.-','color',cc(i,:)); 
   end
   grid on;axis([190 320 -1.3 1.5]);
   hleg = legend({'1','2','3','4','5','6','7','8','9'},'orientation','vertical',... %'Location','north',,...
      'Position',[0.9176 0.3373 0.0625 0.3833]);
   h2=subplot(224);hold on;
-  for i=1:9 semilogy(r.fov(1).qn(ich,1:end-1), r.fov(i).binsz(ich,:),'.-');end
+  for i=1:9 semilogy(r.fov(1).qn(cch,1:end-1), r.fov(i).binsz(cch,:),'.-');end
   grid on;xlim([190 320]); legend('bin population')
     linkaxes([h1 h2],'x');set(h1,'xticklabel','');
     pp1=get(h1,'position');set(h1,'position',[pp1(1) pp1(2)-pp1(4)*0.1 pp1(3) pp1(4)*1.1])
     pp2=get(h2,'position');set(h2,'position',[pp2(1) pp2(2)+pp2(4)*0.1 pp2(3) pp2(4)*1.1])  
   annotation('textbox', [0 0.9 1 0.1], 'String', title5, 'fontSize',14,...
     'EdgeColor', 'none','HorizontalAlignment', 'center')
-  %saveas(gcf,[phome pfnam_pref 'quantiles.fig'],'fig');
+  %saveas(fh5,[phome pfnam_pref 'quantiles.fig'],'fig');
+  %saveas(fh5,[phome pfnam_pref 'quantiles.png'],'png');
 
 
 
