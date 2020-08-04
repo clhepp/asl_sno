@@ -114,13 +114,14 @@ if(VIS)  fh2 = figure(2);clf; end
   %saveas(fh2,[phome pfnam_pref 'maps.png'],'png');
   
 % ------------ Histograms -----------------
-pc_diff_pdf = 100.*(r.pdf_crad - r.pdf_drad)./r.pdf_crad;
+pc_diff_pdf = 100.*(r.pdf.crad - r.pdf.drad)./r.pdf.crad;
 title3=['ASL AC.' num2str(src) ' SNO ' r.sdate ' to ' r.edate ' ' wvn ' cm^{-1} pdfs ' vers];
 if(~VIS) fh3 = figure('visible','off'); end
 if(VIS) fh3=figure(3);clf; end
   set(gcf,'Resize','off');set(fh3,'Position',fh3.Position+[0 0 360 185]);
-  h1 = subplot(221);plot(r.btcens,r.pdf_crad(cch,:),'.-', r.btcens,r.pdf_drad(dch,:),'.-',...
-    r.btcens,r.pdf_arad(ach,:),'-'); grid on;xlim([190 330]);
+  h1 = subplot(221);plot(r.pdf.radcens,r.pdf.crad(cch,:),'.-', ...
+    r.pdf.radcens,r.pdf.drad(dch,:),'.-',...
+    r.pdf.radcens,r.pdf.arad(ach,:),'-'); grid on;xlim([190 330]);
     xlabel('Scene BT bin (K)');ylabel('Number in bin');legend('CrIS','AIRStoCrIS','AIRS')
     title('')
   h2=subplot(223);plot(r.biascens, r.pdf_bias(cch,:), '.-');grid on;
@@ -181,7 +182,7 @@ if(VIS)  fh4 = figure(4);clf; end
   axis([wnbnd(1) wnbnd(2) -0.8 0.8]);grid on;
   legend('1','2','3','4','5','6','7','8','9','Location','eastOutside',...
          'orientation','vertical');
-  xlabel('wavenumber cm^{-1}');ylabel('CcIS minus AIRS (K)');
+  xlabel('wavenumber cm^{-1}');ylabel('CrIS minus AIRS (K)');
 % with FOV 5 as the reference
   h3=subplot(223);hold on;
   for i=[1:4 6:9] plot(r.fc,r.fov(i).bias_mn - r.fov(5).bias_mn,'-','color',cc(i,:)); end

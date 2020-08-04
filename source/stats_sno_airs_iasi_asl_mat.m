@@ -8,87 +8,85 @@ function r = stats_sno_airs_iasi_asl_mat(s,band)
 % Hardwire spectral band
 if(~ismember(band,{'LW','MW','SW'})) error('Invalid band'); return; end
 
-% plot options
-% set(gcf,'Resize','off');
-
-s.rd = s.ri2a;
 fa   = s.fa(s.achns);
 fi   = s.fi(s.ichns);
 fd   = s.fd(s.dchns);
 vers = '';
 
 phome = '/home/chepplew/projects/sno/airs_iasi/figs/';
-hamm = 0;
+hamm  = 0;
 
 % --------------- convert to BT ----------------------------
 disp('converting to BT')
 abt      = real(rad2bt(fa, s.ra(:,s.iok)));
 if hamm
-   junk  = hamm_app(double(s.ri2a(:,s.iok)));
-   dbt   = real(rad2bt(fd, junk));
+   s.rd    = hamm_app(double(s.ri2a(:,s.iok)));
+   dbt     = real(rad2bt(fd, s.rd));
 else
-  ibt      = abs(rad2bt(fi, s.ri(:,s.iok)));         % when complex
-  dbt      = real(rad2bt(fd, s.rd(:,s.iok)));
+  ibt      = real(rad2bt(fi, s.ri(:,s.iok)));
+  s.rd     = s.ri2a(:,s.iok);
+  dbt      = real(rad2bt(fd, s.rd));
 end
-%nbr_cbt  = real(rad2bt(fc, s.nbr_rLW(:,:,ig)));     clear junk;
-%nbr_abt  = real(rad2bt(fa, s.nbr_ra(:,:,ig)));
-%nbr_dbt  = real(rad2bt(fd, s.nbr_rd(:,:,ig)));
+%nbr.cbt  = real(rad2bt(fc, s.nbr_rLW(:,:,ig)));
+%nbr.abt  = real(rad2bt(fa, s.nbr_ra(:,:,ig)));
+%nbr.dbt  = real(rad2bt(fd, s.nbr_rd(:,:,ig)));
 % ---------------- Basic Stats ------------------------------
 izx = find(ibt == 0);
 ibt(izx) = NaN;
 
 disp('calculating global basic stats');
 btbias   = abt - dbt;
- % whos abt cbt dbt nbr_abt nbr_cbt nbr_dbt btbias
 abm      = nanmean(abt,2);
 ibm      = nanmean(ibt,2);
 dbm      = nanmean(dbt,2);
-bias_mn  = nanmean(abt - dbt,2);
+bbias_mn = nanmean(abt - dbt,2);
 bias_sd  = nanstd(abt - dbt, 0,2);
-radstd   = nanstd( s.ra(:,s.iok) - s.ri2a(:,s.iok),0,2 );
+radstd   = nanstd( s.ra(:,s.iok) - s.rd,0,2 );
  adbm    = 0.5*( nanmean(abt,2) + nanmean(dbt,2) );
- mdr     = 1E-3*( 1./drdbt(fd,adbm) );
+ mdr     = 1E0*( 1./drdbt(fd,adbm) );                 % was 1E-3*()
 btstd    = mdr.*radstd;
 btser    = btstd./sqrt(size(abt,2));
 
 % Work in radiance space (for IASI > 2400 cm-1 radiance becomes -ve due to noise)
-r_mn     = 0.5*( s.ra(:,s.iok) + s.rd(:,s.iok));
+arm      = nanmean(s.ra(:,s.iok),2);
+irm      = nanmean(s.ri(:,s.iok),2);
+drm      = nanmean(s.rd,2);
+r_mn     = 0.5*( s.ra(:,s.iok) + s.rd);
 bt_mn    = rad2bt(fd, r_mn);
-r_diff   = s.ra(:,s.iok) - s.rd(:,s.iok);
+r_diff   = s.ra(:,s.iok) - s.rd;
 bias_bt  = bt_mn - rad2bt(fd, r_mn + r_diff);
-bias_mn  = nanmean(bias_bt,2);
+rbias_mn = nanmean(bias_bt,2);
 
 
-%nbr_cbm  = nanmean(nbr_cbt,3);
-%nbr_abm  = nanmean(nbr_abt,3);
-%nbr_dbm  = nanmean(nbr_dbt,3);
-%nbr_cbsd = nanstd(nbr_cbt,0,3);                     % global std.dev
-%nbr_absd = nanstd(nbr_abt,0,3);
-%nbr_dbsd = nanstd(nbr_dbt,0,3);
- whos *bt *bm bt* bias_* btser nbr_*
+%nbr.ibm  = nanmean(nbr.ibt,3);
+%nbr.abm  = nanmean(nbr.abt,3);
+%nbr.dbm  = nanmean(nbr.dbt,3);
+%nbr.ibsd = nanstd(nbr.ibt,0,3);                     % global std.dev
+%nbr.absd = nanstd(nbr.abt,0,3);
+%nbr.dbsd = nanstd(nbr.dbt,0,3);
 
 % --------------- neighbour stats at SNOs ----------------------------
 
-%nsd_abt  = nanstd(nbr_abt,0,2);
-%nsd_cbt  = nanstd(nbr_cbt,0,2);
-%nsd_dbt  = nanstd(nbr_dbt,0,2);
+%nbr.ansd  = nanstd(nbr.abt,0,2);
+%nbr.insd  = nanstd(nbr.ibt,0,2);
+%nbr.dnsd  = nanstd(nbr.dbt,0,2);
 %
-%nmx_cbt  = max(nbr_cbt,[],2);
-%nmn_cbt  = min(nbr_cbt,[],2);
-%nex_cbt  = nmx_cbt - nmn_cbt;
+%nbr.nmx  = max(nbr.abt,[],2);
+%nbr.nmn  = min(nbr.abt,[],2);
+%nbr.nex  = nbr.nmx - nbr.nmn;
 %
 %inLowSD = find(squeeze(nsd_cbt <= 6));
 %inLowEX = find(squeeze(nex_cbt(ich,1,:)) <= 6);
 %xbins = [0:1:60];   xcens = [0.5:1:59.5];
 %for i=1:length(s.cchns) pdf_nex_cbt(i,:) = histcounts(squeeze(nex_cbt(i,1,:)), xbins); end
 
- whos nsd_abt nsd_cbt nsd_dbt nex_cbt pdf_nex_cbt pdf_nsd_cbt;
+% whos nsd_abt nsd_cbt nsd_dbt nex_cbt pdf_nex_cbt pdf_nsd_cbt;
  
 % ---------------- generate mean vals from neighbours ---------------
-%sim_ra   = squeeze(nanmean(s.nbr_ra,2));
-%sim_rc   = squeeze(nanmean(s.nbr_rLW,2));
-%sim_cbt  = real(rad2bt(s.fc(s.cchn), sim_rc'));
-%sim_abt  = real(rad2bt(s.fa(s.achn), sim_ra'));
+%sim.ra   = squeeze(nanmean(s.nbr_ra,2));
+%sim.rc   = squeeze(nanmean(s.nbr_rLW,2));
+%sim.cbt  = real(rad2bt(s.fc(s.cchn), sim.rc'));
+%sim.abt  = real(rad2bt(s.fa(s.achn), sim.ra'));
 %
 
 % --------- generate simulated Obs using SNOs & neighbours ---------------
@@ -96,28 +94,69 @@ clear sim_rc sim_ra;
 %for j=1:length(s.cchns)
 %  for i=1:size(s.rc,2) sim_ra(j,i) = 0.8*s.rc(j,i) + 0.1*sum(s.nbr_rLW(j,1:2,i)); end
 %end
-%sim_abt  = real(rad2bt(s.fc(s.cchns), sim_ra(:,ig)));
-%sim_abt  = real(rad2bt(s.fa(s.achn(4)), sim_ra'));
-  whos sim_rc sim_ra sim_cbt sim_abt;
+%sim.abt  = real(rad2bt(s.fc(s.cchns), sim.ra(:,ig)));
+%sim.abt  = real(rad2bt(s.fa(s.achn(4)), sim.ra'));
 
 % --------------------- full set PDFs --------------------------
 disp('calculating pdfs');
-clear pdf_*
-btbins  = [190.0: 1.0: 330]; btcens = [190.5: 1.0: 329.5];
-for i=1:size(ibt,1) pdf_ibt(i,:) = histcounts(ibt(i,:), btbins); end
-for i=1:size(abt,1) pdf_abt(i,:) = histcounts(abt(i,:), btbins); end
-for i=1:size(dbt,1) pdf_dbt(i,:) = histcounts(dbt(i,:), btbins); end
-%for i=1:size(nbr_cbt,1) pdf_nbr_cbt(i,:) = histcounts(nbr_cbt(i,:), btbins); end
-%for i=1:size(nbr_abt,1) pdf_nbr_abt(i,:) = histcounts(nbr_abt(i,:), btbins); end
-%for i=1:size(nbr_dbt,1) pdf_nbr_dbt(i,:) = histcounts(nbr_dbt(i,:), btbins); end
-%for i=1:size(sim_rc,1)  pdf_sim_cbt(i,:) = histcounts(sim_cbt(i,:), btbins); end
-%%for i=1:size(abt,1)     pdf_sim_abt(i,:) = histcounts(sim_abt(i,:), btbins); end
+clear pdf
+tbtbins  = [190.0: 2.0: 330]; tbtcens = [191.0: 2.0: 329.0];
+for i=1:size(ibt,1) 
+   [pdf.ibt(i,:),~,pdf.ibin(i,:)] = histcounts(ibt(i,:), tbtbins); end
+for i=1:size(abt,1) 
+   [pdf.abt(i,:),~,pdf.abin(i,:)] = histcounts(abt(i,:), tbtbins); end
+for i=1:size(dbt,1) 
+   [pdf.dbt(i,:),~,pdf.dbin(i,:)] = histcounts(dbt(i,:), tbtbins); end
+%for i=1:size(nbr.cbt,1) pdf.nbr_cbt(i,:) = histcounts(nbr.cbt(i,:), btbins); end
+%for i=1:size(nbr.abt,1) pdf.nbr_abt(i,:) = histcounts(nbr.abt(i,:), btbins); end
+%for i=1:size(nbr.dbt,1) pdf.nbr_dbt(i,:) = histcounts(nbr.dbt(i,:), btbins); end
+%for i=1:size(sim.rc,1)  pdf.sim_cbt(i,:) = histcounts(sim.cbt(i,:), btbins); end
+%%for i=1:size(abt,1)     pdf.sim_abt(i,:) = histcounts(sim.abt(i,:), btbins); end
 %
 biasbins = [-10:0.05:10];  biascens = [-9.975:0.05:9.975];
-for i=1:size(dbt,1) pdf_bias(i,:) = histcounts(abt(i,:)-dbt(i,:), biasbins); end
+for i=1:size(dbt,1) pdf.bbias(i,:) = histcounts(abt(i,:)-dbt(i,:), biasbins); end
 %
 %for i=1:size(nsd_cbt,1) pdf_nsd_cbt(i,:) = histcounts(nsd_cbt(i,:), biasbins); end
- whos pdf_*
+% whos pdf_*
+
+switch band
+  case 'LW'
+    drad = 1;
+    %radbins = [10 : drad : 160];
+    wvn = 900;
+    radbins = bt2rad(wvn,tbtbins);
+  case 'MW'
+    drad = 0.5;
+    %radbins = [2 : drad : 100];
+    wvn = 1231;
+    radbins = bt2rad(wvn,tbtbins);
+  case 'SW'
+    drad = 0.04;
+    junk = [0.001 : drad : 4];
+    %radbins = junk;  % 0.25*(junk.^2);
+    wvn = 2456;
+    radbins = bt2rad(wvn,tbtbins);
+end
+radcens = mean([radbins(1:end-1);radbins(2:end)]);
+clear *rbtcens
+for i=1:length(fa) arbtcens(i,:) = rad2bt(fa(i),radcens); end
+for i=1:length(fi) irbtcens(i,:) = rad2bt(fi(i),radcens); end
+for i=1:length(fd) drbtcens(i,:) = rad2bt(fd(i),radcens); end
+
+for i=1:size(s.ri,1) pdf.irad(i,:) = histcounts(s.ri(i,s.iok), radbins); end
+for i=1:size(s.ra,1) pdf.arad(i,:) = histcounts(s.ra(i,s.iok), radbins); end
+for i=1:size(s.rd,1) pdf.drad(i,:) = histcounts(real(s.rd(i,:)), radbins); end
+
+pdf.tbtbins  = tbtbins;
+pdf.tbtcens  = tbtcens;
+pdf.biasbins = biasbins;
+pdf.biascens = biascens;
+pdf.radbins  = radbins;
+pdf.radcens  = radcens;
+% save space
+pdf.abin = int16(pdf.abin);
+pdf.ibin = int16(pdf.ibin);
+pdf.dbin = int16(pdf.dbin);
  
 % -------------------------- quantiles --------------------------- %
 disp('working on quantiles...');
@@ -127,51 +166,69 @@ disp('working on quantiles...');
 load('/home/chepplew/projects/sno/prob_vector61.mat');               % p [1x61]
 junk = 0.0:0.1:10; yp = sigmf(junk,[2 4]); clear junk yp; 
 junk = [-5:.05:5]; y0 = normpdf(junk,0,1); yp = cumsum(y0)./20.0; clear junk y0;
+junk = [-5:.25:5]; y0 = normpdf(junk,0,1); yp = cumsum(y0)./4.0; clear junk y0;
 % Choose which profiler to use (goes in prf)
 s.prf  = yp;
 
 % create the scene bins for each channel and choose AIRS or simulated AIRS
-xbt = dbt;      xra = s.ri2a;
-%xbt = sim_abt;  xra = sim_ra;
+xrd = real(s.rd);
+xra = s.ra(:,s.iok);
 
-clear qaBins qdBins qsBins qa qd qad;
-qaBins.B = quantile(abt,s.prf,2);
-qdBins.B = quantile(xbt,s.prf,2);
-qa       = cell2mat(struct2cell(qaBins));
-qd       = cell2mat(struct2cell(qdBins));
-qad      = (qa + qd)/2.0;
+clear bt rd q*;
+bt.qaBins   = quantile(abt,s.prf,2);
+bt.qdBins   = quantile(dbt,s.prf,2);
+bt.qad      = (bt.qaBins + bt.qdBins)/2.0;
+% radiance
+rd.qaBins   = quantile(xra,s.prf,2);
+rd.qdBins   = quantile(xrd,s.prf,2);
+rd.qad      = (rd.qaBins + rd.qdBins)/2.0;
 
 for jj = 1:numel(s.achns)
-  sbins = qad(jj,:);
-  [dbin dbinStd dbinN dbinInd] = Math_bin(xbt(jj,:),abt(jj,:)-xbt(jj,:),sbins); 
-  [abin abinStd abinN abinInd] = Math_bin(abt(jj,:),abt(jj,:)-xbt(jj,:),sbins);
-
-  % diagnostics: record the separate number samples in each bin:
+  [dbin dbinStd dbinN dbinInd] = Math_bin(dbt(jj,:),abt(jj,:)-dbt(jj,:),bt.qad(jj,:)); 
+  [abin abinStd abinN abinInd] = Math_bin(abt(jj,:),abt(jj,:)-dbt(jj,:),bt.qad(jj,:));
   num_abin(jj,:) = abinN;
   num_dbin(jj,:) = dbinN;
-  
   for i = 1:length(dbin)                                                       
     ubinInd(i,:) = {union(dbinInd{i},abinInd{i})};                  
   end
 
+  % radiance space
+  [dbin dbinStd dbinN dbinInd] = Math_bin(xrd(jj,:),xra(jj,:)-xrd(jj,:),rd.qad(jj,:)); 
+  [abin abinStd abinN abinInd] = Math_bin(xra(jj,:),xra(jj,:)-xrd(jj,:),rd.qad(jj,:));
+  num_abin(jj,:) = abinN;
+  num_dbin(jj,:) = dbinN;
+  for i = 1:length(dbin)                                                       
+    rbinInd(i,:) = {union(dbinInd{i},abinInd{i})};                  
+  end
+
   for i = 1:length(dbin)
-    q.binsz(jj,i)   = length(ubinInd{i});
-    q.btbias(jj,i)  = nanmean( abt(jj,ubinInd{i}) - xbt(jj,ubinInd{i}) );
-    q.radstd(jj,i)  = nanstd( s.ra(jj,s.iok(ubinInd{i})) - xra(jj,s.iok(ubinInd{i})) );   % s.rc
-    cdbm(i)    = 0.5*( nanmean(abt(jj,ubinInd{i})) + nanmean(xbt(jj,ubinInd{i})) );
-      mdr      = 1E-3*( 1./drdbt(fd(jj),adbm(i)) );
+    % in radiance space
+    q.rbinsz(jj,i)  = length(rbinInd{i});
+    rdelta          = xra(jj,rbinInd{i}) - xrd(jj,rbinInd{i}); 
+    r_mn            = 0.5*( xra(jj,rbinInd{i}) + xrd(jj,rbinInd{i}) );
+    bt_mn           = rad2bt(fd(jj), r_mn);
+    bias_bt         = bt_mn - rad2bt(fd(jj), r_mn - rdelta);
+    q.bias_mn(jj,i) = nanmean(real(bias_bt),2);
+    
+    % in BT space 
+    q.bbinsz(jj,i)  = length(ubinInd{i});
+    q.btbias(jj,i)  = nanmean( abt(jj,ubinInd{i}) - dbt(jj,ubinInd{i}) );
+    q.radstd(jj,i)  = nanstd( xra(jj,ubinInd{i}) - xrd(jj,ubinInd{i}) );   % s.rc
+    adbm(i)    = 0.5*( nanmean(abt(jj,ubinInd{i})) + nanmean(dbt(jj,ubinInd{i})) );
+      mdr      = 1E0*( 1./drdbt(fd(jj),adbm(i)) );                % was 1E-3*()
     q.btstd(jj,i)   = mdr.*q.radstd(jj,i);  
-    q.btser(jj,i)   = q.btstd(jj,i)./sqrt(q.binsz(jj,i));
+    q.btser(jj,i)   = q.btstd(jj,i)./sqrt(q.bbinsz(jj,i));
     %%bias250(jj,i) = q.btbias(jj,i)./drd250(jj);                 % option hard wired
   end
-  jtot  = sum(q.binsz(jj,:));
+  jtot  = sum(q.bbinsz(jj,:));
   jmdr  = 1E-3*( 1./drdbt(fd(jj),abm(jj)) );
-  jbtse = jmdr.* nanstd(s.ra(jj,s.iok) - xra(jj,s.iok),1,2) / sqrt(jtot);   % s.rc
+  jbtse = jmdr.* nanstd(xra(jj,:) - xrd(jj,:),1,2) / sqrt(jtot);
   fprintf(1,'.');
 end
 fprintf(1,'\n');
-q.qn = qad;
-  whos q     % binsz btbias btstd btser
+q.rd_qn = rd.qad;
+q.bt_qn = bt.qad;
+%  whos q     % binsz btbias btstd btser
 
 % ------------------- Hot Bin Investigation ----------------------
 %{
@@ -217,33 +274,32 @@ figure(6);clf;semilogy(btcens, pdf_nbr_cbt_bin304(ich,:),'.-');xlim([275 315]);g
 %                   SUBSET by IASI FOV 
 % ----------------------------------------------------------------------
 
-disp('working on CrIS FOV subsets');
+disp('working on IASI FOV subsets');
 clear xFOV nFOV fov;
 for i = 1:4 xFOV{i} = find(s.ifov(s.iok) == i); end
 for i = 1:4 nFOV(i) = numel(xFOV{i}); end
-ra_tmp = s.ra(:,s.iok);
-rd_tmp = s.rd(:,s.iok);
+%ra_tmp = s.ra(:,s.iok);
+%rd_tmp = s.rd(:,s.iok);
 for i=1:4
-  fov(i).r_mn    = 0.5*( ra_tmp(:,xFOV{i}) + rd_tmp(:,xFOV{i}));
-  fov(i).r_diff  = ra_tmp(:,xFOV{i}) - rd_tmp(:,xFOV{i});
+  fov(i).r_mn    = 0.5*( xra(:,xFOV{i}) + xrd(:,xFOV{i}));
+  fov(i).r_diff  = xra(:,xFOV{i}) - xrd(:,xFOV{i});
   fov(i).bias_mn = nanmean(rad2bt(fd, fov(i).r_mn) - ...
                        rad2bt(fd, fov(i).r_mn + fov(i).r_diff), 2);
-  fov(i).abt     = real( rad2bt(s.fa(s.achns), ra_tmp(:, xFOV{i})) );
-  fov(i).dbt     = real( rad2bt(s.fd(s.dchns), rd_tmp(:, xFOV{i})) );
+  fov(i).abt     = real( rad2bt(s.fa(s.achns), xra(:, xFOV{i})) );
+  fov(i).dbt     = real( rad2bt(s.fd(s.dchns), xrd(:, xFOV{i})) );
 end
-clear ra_tmp rd_tmp;
 %
-btbins  = [190.0: 1.0: 330]; btcens = [190.5: 1.0: 329.5];
 
+btbins  = [190.0: 1.0: 330]; btcens = [190.5: 1.0: 329.5];
 for i=1:4
-  for j=1:length(s.achns) fov(i).pdf(j,:) = histcounts(fov(i).ibt(j,:), btbins); end
+  for j=1:length(s.dchns) fov(i).pdf(j,:) = histcounts(fov(i).dbt(j,:), btbins); end
 end
 
 %for i=1:4
 %  fov(i).mbias = nanmean(fov(i).bias_bt, 2);
 %end
 
-junk = s.ra(:,s.iok) - s.rd(:,s.iok);
+junk = s.ra(:,s.iok) - s.rd;
 for i = 1:4
   radstd  = nanstd(junk(:,xFOV{i}),0,2 );
    adbm    = 0.5*( nanmean(dbt(:,xFOV{i}),2) + nanmean(abt(:,xFOV{i}),2) );
@@ -264,7 +320,7 @@ end
 disp('computing quantiles for each FOV - will take a while!')
 for i=1:4 fov(i).binsz = []; fov(i).btbias = []; fov(i).btstd = []; fov(i).btser = []; end
 for i=1:4
-  xrd = s.ri2a(:,xFOV{i});
+  xrd = s.rd(:,xFOV{i});
   xra = s.ra(:,xFOV{i});
 for j = 1:size(abt,1)
   sbins = fov(i).qn(j,:);
@@ -295,19 +351,14 @@ r.res   = '';  % s.res;
 r.vers  = vers;
 r.band  = band;
 r.sdate = s.sdate;     r.edate = s.edate;
-r.nsam  = size(dbt,2);
+r.nsam  = size(s.iok,2);
 r.fa    = fa;         r.fi = fi;         r.fd = fd;
 r.achns = s.achns; r.ichns = s.ichns; r.dchns = s.dchns;
-r.abt      = abt;
+r.abt      = single(abt);
 r.btbias   = single(btbias);
 r.abm = abm;  r.ibm = ibm;  r.dbm = dbm;
-r.bias_mn  = bias_mn;  r.bias_sd = bias_sd; r.btser = btser;  r.btstd = btstd;
-r.pdf_abt  = pdf_abt;
-r.pdf_ibt  = pdf_ibt;
-r.pdf_dbt  = pdf_dbt;
-r.btbins   = btbins;      r.btcens  = btcens;
-r.pdf_bias = pdf_bias;
-r.biasbins = biasbins;  r.biascens = biascens;
+r.bias_mn  = rbias_mn;  r.bias_sd = bias_sd; r.btser = btser;  r.btstd = btstd;
+r.pdf      = pdf;
 r.q        = q;
 r.fov      = fov;
 
@@ -321,6 +372,9 @@ disp('completed and return structure r');
 %                     PLOTTING SECTION 
 % ----------------------------------------------------------------
 %
+% plot options
+% set(gcf,'Resize','off');
+
 cc=fovcolors;       % Howard's 9 line colors uas as: plot(...,'-','color',cc(i,:))
 
 figure(1);clf;plot(fa,abm,'-',fc,cbm,'-',fd,dbm,'-');

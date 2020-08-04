@@ -1,7 +1,7 @@
 function plot_sno_iasi_cris_asl_mat(r, s, vis)
 
 % first run:  s = load_sno_iasi_cris_asl_mat(sdate, edate, xchns, src);
-% then run:   r = stats_sno_iasi_cris_asl_mat(2,'band');
+% then run:   r = stats_sno_iasi_cris_asl_mat(s,'band');
 %
 % currently no neighbour FOVs
 % Manual edits required for which missions (IASI-1,2 CrIS-1,2) and resolution.

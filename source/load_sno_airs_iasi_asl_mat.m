@@ -14,7 +14,7 @@ function [s] = load_sno_airs_iasi_asl_mat_v2(sdate, edate, xchns, src)
 %                [   1:1269] (645  - 1100) cm-1
 %                [1270:2162] (1100 - 1615) cm-1
 %                [2163:2645] (2181 - 2665) cm-1.
-%           4. src: IASI mission number [1 or 2] IASI-1 or IASI-2
+%           4. src: IASI mission number [1, 2 or 3] IASI-1 or -2, -3
 %
 % Output:  structure of arrays. 
 %             s: the SNO single fields.
@@ -55,7 +55,7 @@ junk = [-5:.05:5]; y0 = normpdf(junk,0,1); yp = cumsum(y0)./20.0; clear junk y0;
 s.prf  = yp;
 
 % Process and check the date strings
-posYrs = [2002:2018];
+posYrs = [2002:2019];
 posMns = [1:12];
 whos sdate; disp([sdate ' to ' edate]); fprintf('\n');
 try 
@@ -84,9 +84,10 @@ if(length(xchns) > 20 || length(xchns) < 1 ) fprintf(1,'Wrong number channels\n'
 if(min(xchns) < 1 || max(xchns) > 1317 ) fprintf(1,'Wrong channel numbers used\n'); end
 
 % Check IASI Mission source
-if(~ismember(src,[1,2])) error('Invalid IASAI mission number [1 or 2]'); return; end
+if(~ismember(src,[1,2,3])) error('Invalid IASAI mission number [1 or 2]'); return; end
 if(src == 1) IX = '';  IR = 'M02'; end
 if(src == 2) IX = '2'; IR = 'M01'; end
+if(src == 3) IX = '3'; IR = 'M03'; end
 s.src = src;
 
 % load IASI and AIRS channels & good AIRS channels (nig) to use, & bad (nib) to avoid

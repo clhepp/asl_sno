@@ -1,8 +1,12 @@
-function r = stats_sno_iasi_cris_asl_mat(s, band)
+function r = stats_sno_iasi_cris_asl_mat(s, band, subset)
 
+% BIAS is CrIS minus IASI2CRIS
 % first run:  [s] = load_sno_iasi_cris_asl_mat(sdate, edate, xchns, src);
 % currently no neighbour FOVs
 % Manual edits required for which missions (IASAI-1,2 CrIS-1,2) and resolution.
+% INPUTS: s (structire from load)
+%         band {'LW','MW','SW'} aid to sampling
+%         subset: {'night','day', 'tropics','north','south',''}; (empty = no subset)
 %
 % 
 
@@ -12,14 +16,19 @@ addpath /asl/matlib/aslutil                         % rad2bt.m
 addpath /home/strow/Git/breno_matlab/Math           % Math_bin.m
 addpath /home/chepplew/gitLib/airs_deconv/source    % seq_match.m
 
-% Hardwire spectral band
+% Check spectral band
 if(~ismember(band,{'LW','MW','SW'})) error('Invalid band'); return; end
+
+% Check subset
+subset = lower(subset);
+if(~ismember(subset,{'night','day','tropics','north','south',''}))
+  error('Invalid subset'); return; end
 
 % plot options
 % set(gcf,'Resize','off');
 
 fi   = s.fi(s.ichns);
-fc   = s.fc(s.cchns);
+fc   = s.fc;   % (s.cchns);
 fd   = s.fd(s.dchns);
 %vers = strrep(s.vers,'_','.');
 res  = upper(s.res);
@@ -28,16 +37,41 @@ if(strcmp(res,'LOW'))    CR = 'LR'; end
 if(strcmp(res,'MEDIUM')) CR = 'MR'; end
 if(strcmp(res,'HIGH'))   CR = 'HR'; end
 
-hamm  = 1;
+% ----------------------------------------------------------------------
+%                   SUBSET by Chosen Type
+% ----------------------------------------------------------------------
+disp('Working on Prime subset');
+switch subset
+  case 'night'
+    iis = find( s.csolz > 90);   % s.isolz > 90 &
+    iix = intersect(s.iok, iis); 
+  case 'day'
+    iis = find(s.csolz <= 90);    % s.isolz <= 90 & 
+    iix = intersect(s.iok, iis);
+  case 'tropics'
+    iis = find(s.clat > -40 & s.clat < 40);
+    iix = intersect(s.iok, iis);
+  case 'north'
+    iis = find(s.clat > 0);
+    iix = intersect(s.iok, iis);
+  case 'south'
+    iis = find(s.clat < 0);
+    iix = intersect(s.iok, iis);
+  case ''
+    iix = s.iok;
+end
 
-s.ri     = s.ri(:,s.iok);
-s.rd     = s.rd(:,s.iok);
+% Default: apply hamming
+hamm  = 0;
+
+s.ri     = s.ri(:,iix);
+s.rd     = s.rd(:,iix);
 if hamm
-   s.rc  = hamm_app(double(s.rc(:,s.iok)));
-   %s.rd  = hamm_app(double(s.rd(:,s.iok)));
+   s.rc  = hamm_app(double(s.rc(:,iix)));
+   %s.rd  = hamm_app(double(s.rd));
 else
-  s.rc   = s.rc(:,s.iok);
-  s.rd   = s.rd(:,s.iok);
+  s.rc   = s.rc(:,iix);
+  %s.rd   = s.rd(:,s.iok);
 end
 
 % --------------- convert to BT ----------------------------
@@ -63,7 +97,7 @@ bias_sd    = nanstd(cbt - dbt, 0,2);
 
 radstd   = nanstd( s.rc - s.rd,0,2 ); 
  cdbm    = 0.5*( nanmean(dbt,2) + nanmean(cbt,2) );
- mdr     = 1E-3*( 1./drdbt(s.fd(s.dchns),cdbm) );
+ mdr     = 1E-3*( 1./drdbt(s.fd(s.dchns),cdbm) );    % was 1E-3*()
 btstd    = mdr.*radstd;  
 btser    = btstd./sqrt(size(cbt,2));
 %nbr_cbm  = nanmean(nbr_cbt,3);
@@ -222,14 +256,14 @@ q.qn = qcd;
 % ----------------------------------------------------------------------
 disp('working on CrIS FOV subsets');
 clear xFOV nFOV fov;
-for i = 1:9 xFOV{i} = find(s.cfov(s.iok) == i); end
+for i = 1:9 xFOV{i} = find(s.cfov(iix) == i); end
 for i = 1:9 nFOV(i) = numel(xFOV{i}); end
 for i = 1:9
   fov(i).r_mn    = 0.5*( s.rc(:,xFOV{i}) + s.rd(:,xFOV{i}));
   fov(i).r_diff  = s.rc(:,xFOV{i}) - s.rd(:,xFOV{i});
   fov(i).bias_mn = real(nanmean(rad2bt(fd, fov(i).r_mn) - ...
                        rad2bt(fd, fov(i).r_mn - fov(i).r_diff), 2));
-  fov(i).cbt     = real( rad2bt(s.fc(s.cchns), s.rc(:, xFOV{i})) );
+  fov(i).cbt     = real( rad2bt(fc, s.rc(:, xFOV{i})) );
   fov(i).dbt     = real( rad2bt(s.fd(s.dchns), s.rd(:, xFOV{i})) );
 end
 %
@@ -307,6 +341,8 @@ r.cbt      = cbt;
 r.btbias   = single(btbias);
 r.ibm = ibm;              r.cbm = cbm;              r.dbm = dbm;
 r.bias_mn  = bias_mn;     r.bias_sd = bias_sd;      r.btser = btser;  %r.btstd = btstd;
+r.irm      = irm;         r.crm     = crm;          r.drm   = drm;
+
 r.fov      = fov;
 r.pdf_ibt  = pdf_ibt;     r.pdf_cbt  = pdf_cbt;     r.pdf_dbt  = pdf_dbt;
 r.pdf_bias = pdf_bias;
@@ -374,8 +410,8 @@ figure(1);clf;plot(s.fi(s.ichns),ibm,'-',s.fc(s.cchns),cbm,'-',s.fd(s.dchns),dbm
 figure(2);clf;simplemap(s.clat, s.clon, s.tdiff*24*60);title('Delay IASI-CrIS mins');
 figure(2);clf;simplemap(s.clat, s.clon, s.dist); title('Separation deg');
 ich = 404;   % find(s.fc(s.cchns) >900,1)
-figure(2);clf;simplemap(s.clat(s.iok), s.clon(s.iok), cbt(ich,:)');title('CrIS BT (K)');
-figure(2);clf;simplemap(s.clat(s.iok), s.clon(s.iok), (dbt(ich,:) - cbt(ich,:))');
+figure(2);clf;simplemap(s.clat(iix), s.clon(iix), cbt(ich,:)');title('CrIS BT (K)');
+figure(2);clf;simplemap(s.clat(iix), s.clon(iix), (dbt(ich,:) - cbt(ich,:))');
   title('900wn Bias IASI - CrIS (K)');
 
 % ------------ Histograms -----------------

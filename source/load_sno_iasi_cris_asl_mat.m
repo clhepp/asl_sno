@@ -1,4 +1,4 @@
-function [s] = load_sno_iasi_cris_asl_mat(sdate, edate, xchns, cris_res, src, vers)
+function [s] = load_sno_iasi_cris_asl_mat(sdate, edate, xwns, cris_res, src, vers)
 %
 % function load_sno_iasi_cris_asl_mat() loads up radiances for a selected number
 %   of channels, specified by CrIS channel number, from the ASL SNO mat files 
@@ -6,13 +6,13 @@ function [s] = load_sno_iasi_cris_asl_mat(sdate, edate, xchns, cris_res, src, ve
 %   Unlike the sister function 'read_sno...'
 %   this function cacluates statistics during load and subsets of CrIS FOV.
 %
-% Synopsis: load_sno_iasi_cris_asl_mat('date1','date2',[chan1...chan10]);
+% Synopsis: load_sno_iasi_cris_asl_mat('sdate','edate',[channel list], cris_res, src, vers);
 %           sdate: start date as string: 'YYYY/MM/DD'
 %           edate: end date as string:   'YYYY/MM/DD'
 %           N.B. Only accepts the same year.
-%           xchns: numeric IDs of CrIS channels to load based on NO guard channel list. 
-%           eg [403 499 737 884 905 998 1021 1297] or: 
-%             LoRes:  LW:[1:713], MW:[718:1154], SW:[1155:1317];
+%           xwns: wavenumbers to load. 
+%           eg [900:920] or: 
+%             LoRes:  LW:[1:713], MW:[714:1146], SW:[1147:1317];
 %             MidRes: LW:[1:715], MW:[716:1366], SW:[1367:1683];
 %             HiRes:  LW:[1:713], MW:[714:1578], SW:[1579:2211];
 %                  [1:1269] (645  - 1100) cm-1
@@ -48,7 +48,7 @@ function [s] = load_sno_iasi_cris_asl_mat(sdate, edate, xchns, cris_res, src, ve
 
 cd /home/chepplew/gitLib/asl_sno/run
 
-%addpath /asl/packages/airs_decon/source             % hamm_app.m
+addpath /asl/packages/airs_decon/source             % hamm_app.m
 %addpath /asl/matlib/aslutil                         % rad2bt.m
 addpath /home/chepplew/gitLib/asl_sno/source/
 %addpath /home/strow/Git/breno_matlab/Math           % Math_bin.m
@@ -72,7 +72,7 @@ s.res = lower(cris_res);
 MX = 'ASL';
 
 % Assign version string, vers:
-allvers = {'','noaa_pon','noaa_poff'};
+allvers = {'','noaa_pon','noaa_poff','v20a','v20d','nasa'};
 vers = lower(vers);
 if(~ismember(vers,allvers)); error('version is unrecognized'); return; end
 if(contains(vers,'noaa'))
@@ -96,7 +96,7 @@ if(src(2) == 2) CX = '2'; end
 s.src = src;
 
 % Process and check the date strings
-posYrs = [2002:2018];
+posYrs = [2002:2019];
 posMns = [1:12];
 whos sdate; disp([sdate ' to ' edate]); fprintf('\n');
 try 
@@ -129,7 +129,7 @@ if(nYr2 > nYr1)
   lst1 = dir([dp1 'sno_iasi_cris_asl_*' lower(vers) '.mat']);
   lst2 = dir([dp2 'sno_iasi_cris_asl_*' lower(vers) '.mat']);
   snoLst = [lst1; lst2];
-elseif (nyr2 == nyr1)
+elseif (nYr2 == nYr1)
   disp('yr2 = yr2')
   dp1  = ['/home/chepplew/data/sno/iasi' IX '_cris' CX '/' MX '/' CR '/' cYr1 '/'];
   snoLst = dir(strcat(dp1, 'sno_iasi_cris_asl_*',lower(vers),'.mat'));
@@ -145,7 +145,7 @@ for ii=1:length(snoLst)
 
   junk = regexp(snoLst(ii).name,'[0-9]','match');
   Dx = datenum(cell2mat(junk(1:8)),'yyyymmdd');
-  if(Dx < D1)  ifn1 = ii+1; disp(num2str(ii)); end
+  if(Dx < D1)  ifn1 = ii+1; end                  % disp(num2str(ii)); end
   if(Dx <= D2) ifn2 = ii; end
 end
 
@@ -178,10 +178,12 @@ end
 load('/home/chepplew/projects/iasi/f_iasi.mat');               % f_iasi [8641 x 1]
 if(strcmp(CR,'LR'))
   load('/home/chepplew/projects/cris/cris_freq_2grd.mat'); 
-  fc = vchan; end
+  fcris = vchan;  icris = ichan; 
+end
 if(strcmp(CR,'MR'))
   load('/home/chepplew/myLib/data/cris_mr_freq_2grd.mat'); 
-  fc = vchan; 
+  fcris = vchan;  icris = ichan;
+  load('/home/chepplew/myLib/data/freq_iasi2cris_midres.mat');    % fi2c
 end
 if(strcmp(CR,'HR'))
   load('/home/chepplew/myLib/data/cris_hr_freq_2grd.mat'); 
@@ -191,25 +193,32 @@ end
 whos *cris 
 % Get over-lapping IASI channels
 % iasi2cris for MR returns more channels than CrIS at MR.
-if(strcmp(CR,'MR')) 
-  [fx xi] = intersect(fcris, fi2c); 
-  fcris=fx; 
-  ichns      = [find(f_iasi >= fc(xchns(1)),1): find(f_iasi >= fc(xchns(end)),1)]; 
-  cchns      = xchns;
-  [~, dchns] = intersect(fi2c, fc(cchns));
-  dchns      = dchns';
-end
-if(strcmp(CR,'HR'))
-  %xx = load('~/myLib/data/cris_hr_freq_2grd.mat'); fcris = xx.vchan; icris = xx.ichan;
-  [~, cchns] = intersect(icris, xchns);
-  [~, dchns] = intersect(fi2c, fcris(cchns));
-  ichns      = [find(f_iasi >= fcris(cchns(1)),1): find(f_iasi >= fcris(cchns(end)),1)];
-  [ftmp, ~]  = intersect(fcris(cchns),fi2c(dchns));
-  [~, cchns] = intersect(fcris, ftmp);
-end
-whos *chns 
+%if(strcmp(CR,'LR'))
+%  [cchns, ~] = intersect(icris, xchns);
+%  dchns      = cchns;
+%  ichns      = [find(f_iasi >= fcris(cchns(1)),1): find(f_iasi >= fcris(cchns(end)),1)];
+%    
+%end
+%if(strcmp(CR,'MR')) 
+%  [cchns,~]  = intersect(icris, xchns); 
+%  ichns      = [find(f_iasi >= fcris(xchns(1)),1): find(f_iasi >= fcris(xchns(end)),1)]; 
+%  [~, dchns] = intersect(fi2c, fcris(cchns));
+%  [ftmp, ~]  = intersect(fcris(cchns),fi2c(dchns));
+%end
+%if(strcmp(CR,'HR'))
+%  %xx = load('~/myLib/data/cris_hr_freq_2grd.mat'); fcris = xx.vchan; icris = xx.ichan;
+%  [~, cchns] = intersect(icris, xchns);
+%  [~, dchns] = intersect(fi2c, fcris(cchns));
+%  ichns      = [find(f_iasi >= fcris(cchns(1)),1): find(f_iasi >= fcris(cchns(end)),1)];
+%  [ftmp, ~]  = intersect(fcris(cchns),fi2c(dchns));
+%  [~, cchns] = intersect(fcris, ftmp);
+%end
+%whos *chns 
+% Get the IASI channels to load
+ichns = [find(f_iasi >= xwns(1),1) : find(f_iasi >= xwns(end),1)];
+
 % if all channels are requested - load all IASI (NB beware of memory demand)
-if(length(xchns) == length(fcris)) ichns = [1:8461]; end
+if(length(xwns) == length(fcris)) ichns = [1:8461]; end
 
 
 % ********************* load up SNO data *****************************
@@ -222,12 +231,28 @@ for ifn = ifn1:ifn2;
   if( ismember('ri', {vars.name}) & ismember('rc', {vars.name}) & ...
       (ismember('ri2c', {vars.name}) || ismember('i2rc',{vars.name})) )  
     load(strcat(snoLst(ifn).folder,'/', snoLst(ifn).name));
-    % hack to deal with change field name
+    % test for origin of CrIS spectra, select which cchns to load
+    %%if( all(strcmp(cris_res,{'HIGH','LOW'})) )      %cchns = cinds.fsr; fcris = cfreq.fsr; nvc = 1309;
+      itmp  = [find(fc >= xwns(1),1) : find(fc >= xwns(end),1)];
+      ftmp  = fc(itmp);
+      [fd, dchns]    = intersect(fi2c, ftmp);
+      [fcris, cchns] = intersect(fc, fd);
+      nvc   = length(fcris);
+    %%elseif( all(strcmp(cris_res,{'LOW','LOW'})) )
+      %cchns = cinds.nsr; fcris = cfreq.nsr; nvc = 1317;
+    %%  itmp  = [find(fc >= xwns(1),1) : find(fc >= xwns(end),1)];
+    %%  ftmp  = fc(itmp);
+    %%  [fd, dchns]    = intersect(fi2c, ftmp);
+    %%  [fcris, cchns] = intersect(fc, fd);
+    %%  nvc   = length(fcris);
+    %%end
+
     if( ismember('i2rc',{vars.name})) ri2c = i2rc; end
     if( size(rc,2) ~= size(sno.clat,1) ) disp(['fn: ' num2str(ifn) ' size error']); 
       continue; end
     %if( size(ri,1) == 8461 & size(rc,1) == ncc & size(ri2c,1) == ni2cc ) 
     if( size(ri,1) ~= 8461) ri = ri'; end
+      rc_ham    = single(hamm_app(double(rc)));
       s.rc      = [s.rc, rc(cchns,:)];
       s.ri      = [s.ri, ri(ichns,:)];
       s.rd      = [s.rd, ri2c(dchns,:)];
@@ -254,6 +279,7 @@ s.fi = f_iasi;  s.fd = fi2c;  s.fc = fcris;   % record fcris not fc
 s.cchns  = cchns;
 s.ichns  = ichns';
 s.dchns  = dchns;
+s.hamm   = true;
 
 % Check QA
 iok  = ':'; % find(s.iqual == 0);
