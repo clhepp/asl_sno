@@ -1,12 +1,22 @@
 function [ig] = a2c_good_chans(fc);
 
 addpath /asl/packages/airs_decon/source          % seq_match
+addpath /Users/Hepplewhite/asl.maya/gitLib/airs_decon/source
 
 % ensure supplied vector is a column vector
 if(~iscolumn(fc)) fc=fc'; end
 
 % AIRS channel properties file
+try
 cp = load('/home/strow/Work/Airs/Chan_Prop_Files/chan_prop.2015.03.23.v9.5.3.mat');
+catch
+  warning('channel property files not here!');
+end
+try
+cp = load('/Users/Hepplewhite/asl.maya/myLib/data/chan_prop.2015.03.23.v9.5.3.mat')
+ catch
+  warning('channel property file not here!');
+end
 ig.cp = cp;
 
 mods = unique(cp.cmod);
